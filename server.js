@@ -76,8 +76,12 @@ function handleHttpRequest(req, res) {
 
   const files = {
     "/": ["index.html", "text/html; charset=utf-8"],
+    "/index.html": ["index.html", "text/html; charset=utf-8"],
     "/client.js": ["client.js", "text/javascript; charset=utf-8"],
-    "/styles.css": ["styles.css", "text/css; charset=utf-8"]
+    "/styles.css": ["styles.css", "text/css; charset=utf-8"],
+    "/manifest.webmanifest": ["manifest.webmanifest", "application/manifest+json; charset=utf-8"],
+    "/service-worker.js": ["service-worker.js", "text/javascript; charset=utf-8"],
+    "/icon.svg": ["icon.svg", "image/svg+xml; charset=utf-8"]
   };
   const match = files[url.pathname] || files["/"];
   serveFile(res, path.join(__dirname, match[0]), match[1]);

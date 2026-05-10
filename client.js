@@ -42,6 +42,7 @@ const tokensEl = document.getElementById("tokens");
 const emptyTokenLabel = document.getElementById("emptyTokenLabel");
 const messageEl = document.getElementById("message");
 const turnLabel = document.getElementById("turnLabel");
+const handSectionTitle = document.getElementById("handSectionTitle");
 const tokenLimit = document.getElementById("tokenLimit");
 const cancelBtn = document.getElementById("cancelBtn");
 const winModal = document.getElementById("winModal");
@@ -365,7 +366,7 @@ function renderStatus() {
   }
 
   turnLabel.textContent = game.gameOver ? "Game Over" : `${current.name || `Player ${game.current + 1}`} Turn`;
-  tokenLimit.textContent = `Tokens: ${game.tokensUsed}/2`;
+  tokenLimit.textContent = `${game.tokensUsed}/2`;
   cancelBtn.textContent = game.pendingShot ? "Skip" : "Cancel";
   messageEl.textContent = localMessage || game.lastMessage || "Make your move.";
   document.getElementById("endTurnBtn").disabled = !isMyTurn();
@@ -475,7 +476,6 @@ function renderTokens() {
       }
       selectedCardIndex = null;
       selectedToken = selectedToken === token.id ? null : token.id;
-      showingTokens = false;
       explainToken(token.id);
       render();
     });
@@ -484,10 +484,15 @@ function renderTokens() {
 }
 
 function renderTokenView() {
+  handEl.classList.toggle("hidden", showingTokens);
   tokensEl.classList.toggle("hidden", !showingTokens || tokensEl.children.length === 0);
   emptyTokenLabel.classList.toggle("show", showingTokens && tokensEl.children.length === 0);
+  if (handSectionTitle) handSectionTitle.textContent = showingTokens ? "Token Pouch" : "Your Hand";
   const pouchTitle = tokenPanelBtn.querySelector(".pouch-title");
-  if (pouchTitle) pouchTitle.textContent = showingTokens ? "Close Pouch" : "Token Pouch";
+  if (pouchTitle) pouchTitle.textContent = showingTokens ? "Cards" : "Tokens";
+  tokenPanelBtn.classList.toggle("is-open", showingTokens);
+  tokenPanelBtn.setAttribute("aria-pressed", String(showingTokens));
+  tokenPanelBtn.setAttribute("aria-label", showingTokens ? "Close token pouch" : "Open token pouch");
 }
 
 function renderWin() {
@@ -638,3 +643,9 @@ document.getElementById("settingsTutorialBtn").addEventListener("click", () => {
   showScreen("rules");
 });
 document.getElementById("playAgainBtn").addEventListener("click", () => sendAction({ type: "restart" }));
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/service-worker.js").catch(() => {});
+  });
+}

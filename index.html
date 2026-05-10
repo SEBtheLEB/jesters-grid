@@ -3,7 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#08111f" />
   <title>Jester's Grid</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icon.svg" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body data-theme="dark">
@@ -95,25 +99,23 @@
           <div class="board-wrap"><div id="board" class="board"></div></div>
         </section>
 
-        <section class="token-pouch-row">
-          <button id="tokenPanelBtn" class="token-toggle" aria-label="Open token pouch">
-            <span class="pouch-ornament" aria-hidden="true"></span>
-            <span class="pouch-title">Token Pouch</span>
-            <span id="tokenLimit" class="pouch-count">Tokens: 0/2</span>
-          </button>
-        </section>
-
-        <section class="token-tray-panel">
-          <div id="tokens" class="tokens hidden"></div>
-          <div id="emptyTokenLabel" class="token-view-label">No tokens available</div>
-        </section>
-
         <section class="hand-panel">
           <div class="section-label">
-            <span>Your Hand</span>
+            <span id="handSectionTitle">Your Hand</span>
             <span id="turnLabel">Waiting</span>
           </div>
-          <div id="hand" class="hand"></div>
+          <div class="hand-stage">
+            <div class="hand-scroll">
+              <div id="hand" class="hand"></div>
+              <div id="tokens" class="tokens hidden"></div>
+              <div id="emptyTokenLabel" class="token-view-label">No tokens available</div>
+            </div>
+            <button id="tokenPanelBtn" class="token-toggle" aria-label="Open token pouch" aria-pressed="false">
+              <span class="pouch-ornament" aria-hidden="true"></span>
+              <span class="pouch-title">Tokens</span>
+              <span id="tokenLimit" class="pouch-count">0/2</span>
+            </button>
+          </div>
         </section>
 
         <nav class="player-actions fantasy-panel" aria-label="Match actions">

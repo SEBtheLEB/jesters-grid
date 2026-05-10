@@ -1,0 +1,19 @@
+{
+  "name": "Jester's Grid",
+  "short_name": "Jester Grid",
+  "description": "A royal fantasy 1v1 tactical card duel.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#08111f",
+  "theme_color": "#08111f",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

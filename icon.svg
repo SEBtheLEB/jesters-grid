@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title>Jester's Grid</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#25113b"/>
+      <stop offset="0.48" stop-color="#08111f"/>
+      <stop offset="1" stop-color="#541d31"/>
+    </linearGradient>
+    <radialGradient id="gold" cx="50%" cy="32%" r="70%">
+      <stop offset="0" stop-color="#fff1c8"/>
+      <stop offset="0.48" stop-color="#f7d987"/>
+      <stop offset="1" stop-color="#7f5520"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="104" fill="url(#bg)"/>
+  <rect x="44" y="44" width="424" height="424" rx="78" fill="none" stroke="#f7d987" stroke-width="18"/>
+  <rect x="74" y="74" width="364" height="364" rx="52" fill="none" stroke="#7f5520" stroke-width="8" opacity=".8"/>
+  <path d="M126 180c42-76 82-72 130 6 46-78 88-82 130-6-14 18-31 32-50 41-24-49-50-49-80 1-31-50-57-50-80-1-19-9-36-23-50-41z" fill="url(#gold)"/>
+  <circle cx="126" cy="180" r="24" fill="url(#gold)"/>
+  <circle cx="256" cy="186" r="26" fill="url(#gold)"/>
+  <circle cx="386" cy="180" r="24" fill="url(#gold)"/>
+  <path d="M148 266h216v96H148z" fill="#0b0f1c" stroke="#c2903b" stroke-width="10"/>
+  <path d="M202 266v96M256 266v96M310 266v96M148 314h216" stroke="#7f5520" stroke-width="6" opacity=".9"/>
+  <text x="256" y="340" text-anchor="middle" font-family="Georgia, serif" font-size="84" font-weight="900" fill="#fff1c8" stroke="#4a2b0e" stroke-width="3">JG</text>
+</svg>
