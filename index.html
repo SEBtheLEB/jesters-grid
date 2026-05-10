@@ -12,14 +12,14 @@
       <div class="menu-content">
         <div class="logo">
           <h1>Jester's<br>Grid</h1>
-          <span>TACTICAL CARD DUEL</span>
+          <span>Tactical Court Duel</span>
         </div>
         <div class="hero-card" aria-hidden="true">
           <div class="hat"></div>
           <div class="hero-face"></div>
         </div>
         <div class="lobby-panel fantasy-panel">
-          <label class="field-label" for="playerName">Name</label>
+          <label class="field-label" for="playerName">Duelist Name</label>
           <input id="playerName" class="text-input" maxlength="18" autocomplete="nickname" value="Jester" />
           <button class="big-button" id="createRoomBtn">Create Duel</button>
           <div class="join-row">
@@ -36,39 +36,58 @@
     </section>
 
     <section id="gameScreen" class="screen">
-      <header class="match-header">
-        <button class="icon-medallion" id="backToMenu" aria-label="Back to menu">Menu</button>
-        <div class="match-title">Jester's Grid</div>
-        <button class="settings-button" id="themeGear" aria-label="Settings">Gear</button>
-        <div id="settingsMenu" class="settings-menu">
-          <button class="settings-item" id="copyInviteBtn">Copy Invite</button>
-          <button class="settings-item" id="settingsStatusBtn">Status</button>
-          <button class="settings-item" id="settingsHistoryBtn">Match History</button>
-          <button class="settings-item" id="settingsTutorialBtn">Tutorial</button>
-          <button class="settings-item" id="settingsThemeBtn">Toggle Theme</button>
-        </div>
-      </header>
-
-      <div class="room-strip fantasy-panel">
-        <span id="roomCodeDisplay">Room ----</span>
-        <span id="seatLabel">Connecting</span>
-        <span id="onlineStatus">Offline</span>
-      </div>
-
-      <div class="game-area">
-        <section class="opponent-panel fantasy-panel">
-          <div class="avatar-frame">P2</div>
-          <div class="identity-block">
-            <div class="identity-name" id="opponentName">Waiting</div>
-            <div class="identity-title" id="opponentTitle">Opponent</div>
-            <div class="stat-line">
-              <span>HP 20</span>
-              <span id="opponentInfo">Cards 0 - Tokens 0</span>
+      <div class="game-shell">
+        <header class="top-hud">
+          <div class="match-header">
+            <button class="icon-medallion" id="backToMenu" aria-label="Back to menu">Menu</button>
+            <div class="title-frame">
+              <div class="match-title">Jester's Grid</div>
             </div>
-            <div class="opponent-cards" id="opponentCards"></div>
+            <button class="settings-button" id="themeGear" aria-label="Settings">Gear</button>
+            <div id="settingsMenu" class="settings-menu">
+              <button class="settings-item" id="copyInviteBtn">Copy Invite</button>
+              <button class="settings-item" id="settingsStatusBtn">Status</button>
+              <button class="settings-item" id="settingsHistoryBtn">Match History</button>
+              <button class="settings-item" id="settingsTutorialBtn">Tutorial</button>
+              <button class="settings-item" id="settingsThemeBtn">Toggle Theme</button>
+            </div>
           </div>
-          <div class="resource-chip"><span id="opponentDeck">Deck 0</span></div>
-        </section>
+
+          <div class="room-strip fantasy-panel">
+            <span id="roomCodeDisplay">Room ----</span>
+            <span id="seatLabel">Connecting</span>
+            <span id="onlineStatus">Offline</span>
+          </div>
+
+          <div class="duelist-bar">
+            <section class="opponent-panel fantasy-panel">
+              <div class="avatar-frame">P2</div>
+              <div class="identity-block">
+                <div class="identity-name" id="opponentName">Waiting</div>
+                <div class="identity-title" id="opponentTitle">Opponent</div>
+                <div class="stat-line">
+                  <span>HP 20</span>
+                  <span id="opponentInfo">Cards 0 - Tokens 0</span>
+                </div>
+                <div class="opponent-cards" id="opponentCards"></div>
+              </div>
+              <div class="resource-chip"><span id="opponentDeck">Deck 0</span></div>
+            </section>
+
+            <section class="player-panel fantasy-panel">
+              <div class="avatar-frame">You</div>
+              <div class="identity-block">
+                <div class="identity-name" id="playerNameLabel">You</div>
+                <div class="identity-title" id="playerTitle">Jester Initiate</div>
+                <div class="player-meters">
+                  <span class="meter-chip">HP 20</span>
+                  <span class="meter-chip" id="playerInfo">Cards 0 - Tokens 0</span>
+                  <span class="meter-chip" id="playerDeck">Deck 0</span>
+                </div>
+              </div>
+            </section>
+          </div>
+        </header>
 
         <section class="message-bar fantasy-panel" id="message">Create or join a room.</section>
 
@@ -76,40 +95,38 @@
           <div class="board-wrap"><div id="board" class="board"></div></div>
         </section>
 
-        <section class="player-panel fantasy-panel">
-          <div class="avatar-frame">You</div>
-          <div class="identity-block">
-            <div class="identity-name" id="playerNameLabel">You</div>
-            <div class="identity-title" id="playerTitle">Jester Initiate</div>
-            <div class="player-meters">
-              <span class="meter-chip">HP 20</span>
-              <span class="meter-chip" id="playerInfo">Cards 0 - Tokens 0</span>
-              <span class="meter-chip" id="playerDeck">Deck 0</span>
-            </div>
-          </div>
-          <div class="player-actions">
-            <button id="endTurnBtn" class="action-button" aria-label="End turn">End</button>
-            <button id="cancelBtn" class="action-button secondary">Cancel</button>
-            <button id="tokenPanelBtn" class="token-toggle">Tokens</button>
-          </div>
+        <section class="token-pouch-row">
+          <button id="tokenPanelBtn" class="token-toggle" aria-label="Open token pouch">
+            <span class="pouch-ornament" aria-hidden="true"></span>
+            <span class="pouch-title">Token Pouch</span>
+            <span id="tokenLimit" class="pouch-count">Tokens: 0/2</span>
+          </button>
+        </section>
+
+        <section class="token-tray-panel">
+          <div id="tokens" class="tokens hidden"></div>
+          <div id="emptyTokenLabel" class="token-view-label">No tokens available</div>
         </section>
 
         <section class="hand-panel">
           <div class="section-label">
+            <span>Your Hand</span>
             <span id="turnLabel">Waiting</span>
-            <span id="tokenLimit">Tokens: 0/2</span>
           </div>
           <div id="hand" class="hand"></div>
-          <div id="tokens" class="tokens hidden"></div>
-          <div id="emptyTokenLabel" class="token-view-label">No tokens available</div>
         </section>
+
+        <nav class="player-actions fantasy-panel" aria-label="Match actions">
+          <button id="endTurnBtn" class="action-button" aria-label="End turn">End Turn</button>
+          <button id="cancelBtn" class="action-button secondary">Cancel</button>
+        </nav>
       </div>
     </section>
 
     <section id="rulesScreen" class="screen">
-      <header class="match-header">
+      <header class="match-header rules-header">
         <button class="icon-medallion" id="backRules" aria-label="Back">Back</button>
-        <div class="match-title">Rules</div>
+        <div class="title-frame"><div class="match-title">Rules</div></div>
         <div></div>
       </header>
       <div class="rules-scroll fantasy-panel">

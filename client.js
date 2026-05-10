@@ -350,10 +350,10 @@ function renderStatus() {
   document.getElementById("onlineStatus").textContent = socketOpen() || usingHttpFallback ? "Online" : "Offline";
   document.getElementById("opponentName").textContent = top.name || `Player ${topIndex + 1}`;
   document.getElementById("opponentTitle").textContent = top.connected ? `Player ${topIndex + 1}` : "Disconnected";
-  document.getElementById("opponentInfo").textContent = `Cards ${top.handCount} - Tokens ${top.tokenTotal}`;
+  document.getElementById("opponentInfo").textContent = `C ${top.handCount} - T ${top.tokenTotal}`;
   document.getElementById("opponentDeck").textContent = `Deck ${top.deckCount}`;
   document.getElementById("playerNameLabel").textContent = bottom.name || `Player ${bottomIndex + 1}`;
-  document.getElementById("playerInfo").textContent = `Cards ${bottom.handCount} - Tokens ${bottom.tokenTotal}`;
+  document.getElementById("playerInfo").textContent = `C ${bottom.handCount} - T ${bottom.tokenTotal}`;
   document.getElementById("playerDeck").textContent = `Deck ${bottom.deckCount}`;
 
   const opponentCards = document.getElementById("opponentCards");
@@ -460,7 +460,11 @@ function renderTokens() {
     const button = document.createElement("button");
     const available = player.tokens[token.id] || 0;
     button.className = "token-button";
-    button.textContent = `${token.label} x${available}`;
+    button.innerHTML = `
+      <span class="token-icon">${token.icon}</span>
+      <span class="token-name">${token.label}</span>
+      <span class="token-count">x${available}</span>
+    `;
     button.disabled = !isMyTurn() || available <= 0 || game.tokensUsed >= 2 || (game.pendingShot && token.id !== "pierce") || game.pendingWitchTile !== null;
     if (selectedToken === token.id) button.classList.add("selected");
     button.addEventListener("click", () => {
@@ -480,10 +484,10 @@ function renderTokens() {
 }
 
 function renderTokenView() {
-  handEl.classList.toggle("hidden", showingTokens);
   tokensEl.classList.toggle("hidden", !showingTokens || tokensEl.children.length === 0);
   emptyTokenLabel.classList.toggle("show", showingTokens && tokensEl.children.length === 0);
-  tokenPanelBtn.textContent = showingTokens ? "Cards" : "Tokens";
+  const pouchTitle = tokenPanelBtn.querySelector(".pouch-title");
+  if (pouchTitle) pouchTitle.textContent = showingTokens ? "Close Pouch" : "Token Pouch";
 }
 
 function renderWin() {
