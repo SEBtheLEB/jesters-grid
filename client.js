@@ -25,8 +25,11 @@ const TOKEN_TYPES = [
 
 let socket = null;
 let autoJoinAttempted = false;
+let usingHttpFallback = false;
+let pollTimer = null;
 let requestId = 1;
 const pendingReplies = new Map();
+const clientId = getClientId();
 const screens = {
   menu: document.getElementById("menuScreen"),
   game: document.getElementById("gameScreen"),
@@ -56,6 +59,14 @@ let selectedToken = null;
 let showingTokens = false;
 let localMessage = "";
 
+function getClientId() {
+  const existing = localStorage.getItem("jg-client-id");
+  if (existing) return existing;
+  const id = crypto.randomUUID();
+  localStorage.setItem("jg-client-id", id);
+  return id;
+}
+
 function applyTheme(theme) {
   document.body.setAttribute("data-theme", theme);
   localStorage.setItem("jg-theme", theme);
@@ -83,10 +94,11 @@ function setLocalMessage(text) {
 }
 
 function socketOpen() {
-  return socket?.readyState === WebSocket.OPEN;
+  return !usingHttpFallback && socket?.readyState === WebSocket.OPEN;
 }
 
 function connectRealtime() {
+  if (usingHttpFallback) return;
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
   socket = new WebSocket(`${protocol}://${window.location.host}/ws`);
 
@@ -124,15 +136,23 @@ function connectRealtime() {
   });
 
   socket.addEventListener("close", () => {
+    if (!snapshot) {
+      startHttpFallback();
+      return;
+    }
     setMenuStatus("Disconnected. Reconnecting...");
     if (snapshot) render();
     window.setTimeout(connectRealtime, 1200);
+  });
+
+  socket.addEventListener("error", () => {
+    if (!snapshot) startHttpFallback();
   });
 }
 
 function sendEvent(event, payload, callback) {
   if (!socketOpen()) {
-    callback?.({ ok: false, message: "Connecting to the server." });
+    sendHttpEvent(event, payload, callback);
     return;
   }
 
@@ -146,6 +166,79 @@ function sendEvent(event, payload, callback) {
     pendingReplies.delete(id);
     callback?.({ ok: false, message: "The server did not answer in time." });
   }, 8000);
+}
+
+function startHttpFallback() {
+  if (usingHttpFallback) return;
+  usingHttpFallback = true;
+  setMenuStatus("Connected.");
+  if (roomFromUrl && !snapshot && !autoJoinAttempted) {
+    autoJoinAttempted = true;
+    joinRoom();
+  }
+  startPolling();
+  render();
+}
+
+function startPolling() {
+  if (pollTimer) return;
+  pollTimer = window.setInterval(pollState, 1400);
+}
+
+function stopPolling() {
+  if (!pollTimer) return;
+  window.clearInterval(pollTimer);
+  pollTimer = null;
+}
+
+async function pollState() {
+  if (!usingHttpFallback || !snapshot?.room?.code) return;
+  const seat = mySeat();
+  const params = new URLSearchParams({ code: snapshot.room.code, clientId, seat: String(seat ?? "") });
+  try {
+    const response = await fetch(`/api/state?${params.toString()}`, { cache: "no-store" });
+    const result = await response.json();
+    if (result.ok && result.snapshot) {
+      snapshot = result.snapshot;
+      render();
+    }
+  } catch {
+    setMenuStatus("Reconnecting...");
+  }
+}
+
+async function sendHttpEvent(event, payload, callback) {
+  const routes = {
+    createRoom: "/api/create-room",
+    joinRoom: "/api/join-room",
+    gameAction: "/api/action"
+  };
+  const route = routes[event];
+  if (!route) {
+    callback?.({ ok: false, message: "Unknown action." });
+    return;
+  }
+
+  const body = event === "gameAction"
+    ? { clientId, code: snapshot?.room?.code, seat: mySeat(), action: payload }
+    : { ...payload, clientId };
+
+  try {
+    const response = await fetch(route, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const result = await response.json();
+    if (result.snapshot) {
+      snapshot = result.snapshot;
+      startPolling();
+      render();
+    }
+    callback?.(result);
+  } catch {
+    callback?.({ ok: false, message: "Could not reach the server." });
+  }
 }
 
 function currentGame() {
@@ -254,7 +347,7 @@ function renderStatus() {
 
   document.getElementById("roomCodeDisplay").textContent = `Room ${snapshot.room.code}`;
   document.getElementById("seatLabel").textContent = seat === null ? "Spectator" : `Player ${seat + 1}`;
-  document.getElementById("onlineStatus").textContent = socketOpen() ? "Online" : "Offline";
+  document.getElementById("onlineStatus").textContent = socketOpen() || usingHttpFallback ? "Online" : "Offline";
   document.getElementById("opponentName").textContent = top.name || `Player ${topIndex + 1}`;
   document.getElementById("opponentTitle").textContent = top.connected ? `Player ${topIndex + 1}` : "Disconnected";
   document.getElementById("opponentInfo").textContent = `Cards ${top.handCount} - Tokens ${top.tokenTotal}`;

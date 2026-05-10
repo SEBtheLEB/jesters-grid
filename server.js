@@ -60,8 +60,17 @@ server.listen(PORT, () => {
 
 function handleHttpRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+  if (req.method === "OPTIONS" && url.pathname.startsWith("/api/")) {
+    sendJsonResponse(res, { ok: true });
+    return;
+  }
+
   if (url.pathname === "/healthz") {
     sendJsonResponse(res, { ok: true, rooms: rooms.size, clients: clients.size });
+    return;
+  }
+  if (url.pathname.startsWith("/api/")) {
+    handleApiRequest(req, res, url);
     return;
   }
 
@@ -74,10 +83,101 @@ function handleHttpRequest(req, res) {
   serveFile(res, path.join(__dirname, match[0]), match[1]);
 }
 
-function sendJsonResponse(res, data) {
+async function handleApiRequest(req, res, url) {
+  try {
+    if (url.pathname === "/api/state" && req.method === "GET") {
+      const room = rooms.get(String(url.searchParams.get("code") || "").trim().toUpperCase());
+      if (!room) {
+        sendJsonResponse(res, fail("Room not found."));
+        return;
+      }
+      const seat = resolveSeat(room, url.searchParams.get("clientId"), url.searchParams.get("seat"));
+      sendJsonResponse(res, { ok: true, snapshot: snapshotFor(room, seat) });
+      return;
+    }
+
+    if (req.method !== "POST") {
+      sendJsonResponse(res, fail("Unsupported method."), 405);
+      return;
+    }
+
+    const body = await readJsonBody(req);
+    if (url.pathname === "/api/create-room") {
+      const code = createRoomCode();
+      const clientId = cleanClientId(body.clientId);
+      const room = {
+        code,
+        createdAt: Date.now(),
+        players: [
+          makeSeat(1, cleanName(body.name, "Player 1"), clientId),
+          makeSeat(2, "Player 2", null)
+        ],
+        game: newGame()
+      };
+      rooms.set(code, room);
+      sendJsonResponse(res, { ok: true, code, seat: 0, snapshot: snapshotFor(room, 0) });
+      return;
+    }
+
+    if (url.pathname === "/api/join-room") {
+      const room = rooms.get(String(body.code || "").trim().toUpperCase());
+      if (!room) {
+        sendJsonResponse(res, fail("Room not found."));
+        return;
+      }
+      const seat = claimSeat(room, cleanClientId(body.clientId), body.name);
+      sendJsonResponse(res, { ok: true, code: room.code, seat, snapshot: snapshotFor(room, seat) });
+      return;
+    }
+
+    if (url.pathname === "/api/action") {
+      const room = rooms.get(String(body.code || "").trim().toUpperCase());
+      if (!room) {
+        sendJsonResponse(res, fail("Join a room first."));
+        return;
+      }
+      const seat = resolveSeat(room, body.clientId, body.seat);
+      const result = performAction(room, seat, body.action || {});
+      sendJsonResponse(res, { ...result, snapshot: snapshotFor(room, seat) });
+      return;
+    }
+
+    sendJsonResponse(res, fail("Unknown API route."), 404);
+  } catch (error) {
+    sendJsonResponse(res, fail(error.message || "API error."), 500);
+  }
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let raw = "";
+    req.on("data", (chunk) => {
+      raw += chunk;
+      if (raw.length > 100_000) {
+        reject(new Error("Request body too large."));
+        req.destroy();
+      }
+    });
+    req.on("end", () => {
+      if (!raw) {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(raw));
+      } catch {
+        reject(new Error("Invalid JSON."));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+function sendJsonResponse(res, data, status = 200) {
   const body = JSON.stringify(data);
-  res.writeHead(200, {
+  res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store",
     "content-length": Buffer.byteLength(body)
   });
   res.end(body);
@@ -313,12 +413,24 @@ function makeSeat(id, name, socketId) {
   return { id, name, socketId, connected: !!socketId };
 }
 
+function cleanClientId(value) {
+  const cleaned = String(value || "").replace(/[^\w-]/g, "").slice(0, 80);
+  return cleaned || crypto.randomUUID();
+}
+
 function cleanName(value, fallback) {
   const cleaned = String(value || "").trim().replace(/[^\w .'-]/g, "").slice(0, 18);
   return cleaned || fallback;
 }
 
 function claimSeat(room, socketId, name) {
+  const existingIndex = room.players.findIndex((seat) => seat.socketId === socketId);
+  if (existingIndex >= 0) {
+    room.players[existingIndex].connected = true;
+    room.players[existingIndex].name = cleanName(name, `Player ${existingIndex + 1}`);
+    return existingIndex;
+  }
+
   const openIndex = room.players.findIndex((seat) => !seat.connected);
   if (openIndex >= 0) {
     room.players[openIndex].socketId = socketId;
@@ -328,6 +440,16 @@ function claimSeat(room, socketId, name) {
     return openIndex;
   }
   return null;
+}
+
+function resolveSeat(room, clientId, requestedSeat) {
+  const cleanId = cleanClientId(clientId);
+  const seat = Number(requestedSeat);
+  if (Number.isInteger(seat) && seat >= 0 && seat <= 1 && room.players[seat]?.socketId === cleanId) {
+    return seat;
+  }
+  const found = room.players.findIndex((player) => player.socketId === cleanId);
+  return found >= 0 ? found : null;
 }
 
 function createRoomCode() {
