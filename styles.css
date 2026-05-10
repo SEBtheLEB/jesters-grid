@@ -794,6 +794,10 @@ button:active:not(:disabled) {
     0 0 16px rgba(129, 212, 159, .25);
 }
 
+.tile.last-placed::before {
+  animation: tile-glint .85s ease both;
+}
+
 .tile.stunned .card {
   filter: saturate(.58) brightness(1.08);
 }
@@ -857,6 +861,10 @@ button:active:not(:disabled) {
     0 0 20px rgba(247, 217, 135, .4);
 }
 
+.card.card-placed {
+  animation: card-place-in .42s cubic-bezier(.18, .92, .2, 1.16) both;
+}
+
 @keyframes shake {
   0%,
   100% {
@@ -867,6 +875,80 @@ button:active:not(:disabled) {
   }
   75% {
     transform: translateX(1px) rotate(.6deg);
+  }
+}
+
+@keyframes card-draw-in {
+  0% {
+    opacity: 0;
+    transform: translateY(26px) scale(.86) rotate(-4deg);
+    filter: brightness(1.18);
+  }
+  68% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.04) rotate(1deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0);
+    filter: brightness(1);
+  }
+}
+
+@keyframes card-place-in {
+  0% {
+    opacity: .25;
+    transform: translateY(-12px) scale(.74) rotate(4deg);
+    filter: brightness(1.28);
+  }
+  72% {
+    opacity: 1;
+    transform: translateY(1px) scale(1.06) rotate(-1deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0);
+    filter: brightness(1);
+  }
+}
+
+@keyframes token-tray-in {
+  0% {
+    opacity: 0;
+    transform: translateX(22px) scale(.9);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes token-count-pop {
+  0% {
+    transform: scale(.55);
+    filter: brightness(1.4);
+  }
+  60% {
+    transform: scale(1.22);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes tile-glint {
+  0% {
+    opacity: .2;
+    transform: rotate(45deg) scale(.55);
+  }
+  55% {
+    opacity: .72;
+    transform: rotate(45deg) scale(1.16);
+  }
+  100% {
+    opacity: .16;
+    transform: rotate(45deg) scale(1);
   }
 }
 
@@ -974,6 +1056,10 @@ button:active:not(:disabled) {
   font-weight: 900;
 }
 
+.mini-token.token-added {
+  animation: token-count-pop .42s ease both;
+}
+
 .hand-panel {
   min-height: 0;
   display: grid;
@@ -1023,6 +1109,41 @@ button:active:not(:disabled) {
   overflow: hidden;
 }
 
+.hand-scroll-btn {
+  position: absolute;
+  top: 50%;
+  z-index: 8;
+  width: 28px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  transform: translateY(-50%);
+  color: #2a1607;
+  border: 1px solid rgba(255, 246, 209, .86);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 50% 25%, #fff0b6, var(--gold) 58%, var(--gold-3));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, .2),
+    0 6px 12px rgba(0, 0, 0, .36);
+  font-family: "Trebuchet MS", Arial, sans-serif;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.hand-scroll-btn:active {
+  transform: translateY(-50%) scale(.96);
+}
+
+.hand-scroll-left {
+  left: 0;
+}
+
+.hand-scroll-right {
+  right: 0;
+}
+
 .hand {
   min-width: 0;
   min-height: 0;
@@ -1032,9 +1153,12 @@ button:active:not(:disabled) {
   gap: 7px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 5px 1px 8px;
+  padding: 5px 34px 8px;
   scroll-snap-type: x proximity;
+  scroll-padding-inline: 34px;
+  scroll-behavior: smooth;
   scrollbar-width: none;
+  touch-action: pan-x;
 }
 
 .hand::-webkit-scrollbar,
@@ -1072,6 +1196,7 @@ button:active:not(:disabled) {
     inset 0 -9px 14px rgba(87, 45, 22, .16),
     0 7px 13px rgba(0, 0, 0, .36);
   transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+  touch-action: manipulation;
 }
 
 .hand-card::before {
@@ -1108,6 +1233,27 @@ button:active:not(:disabled) {
     inset 0 0 0 2px var(--gold),
     0 0 20px rgba(247, 217, 135, .52),
     0 10px 18px rgba(0, 0, 0, .42);
+}
+
+.hand-card.is-disabled,
+.token-button.is-disabled {
+  cursor: help;
+  opacity: .64;
+  filter: saturate(.76);
+}
+
+.hand-card.is-holding,
+.token-button.is-holding {
+  transform: translateY(-4px) scale(1.03);
+  box-shadow:
+    inset 0 0 0 2px var(--gold),
+    0 0 22px rgba(247, 217, 135, .45),
+    0 10px 18px rgba(0, 0, 0, .42);
+}
+
+.hand-card.drawn-card {
+  animation: card-draw-in .46s cubic-bezier(.2, .95, .25, 1.15) both;
+  animation-delay: calc(var(--draw-order, 0) * 45ms);
 }
 
 .hand-art {
@@ -1241,14 +1387,17 @@ button:active:not(:disabled) {
   min-height: 0;
   overflow-x: auto;
   overflow-y: hidden;
+  touch-action: pan-x;
 }
 
 .tokens {
   display: flex;
   align-items: stretch;
   gap: 8px;
-  padding: 7px 1px 8px;
+  padding: 7px 34px 8px;
   scroll-snap-type: x proximity;
+  scroll-padding-inline: 34px;
+  scroll-behavior: smooth;
   scrollbar-width: none;
   border: 1px solid rgba(247, 217, 135, .64);
   border-radius: 8px;
@@ -1281,6 +1430,8 @@ button:active:not(:disabled) {
   font-size: 9px;
   font-weight: 900;
   text-transform: uppercase;
+  touch-action: manipulation;
+  transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
 }
 
 .token-button .token-icon {
@@ -1310,6 +1461,15 @@ button:active:not(:disabled) {
   box-shadow:
     inset 0 0 0 2px var(--gold),
     0 0 18px rgba(247, 217, 135, .4);
+}
+
+.tokens:not(.hidden) .token-button {
+  animation: token-tray-in .34s cubic-bezier(.2, .95, .25, 1.1) both;
+  animation-delay: calc(var(--draw-order, 0) * 45ms);
+}
+
+.token-button.token-changed .token-icon {
+  animation: token-count-pop .42s ease both;
 }
 
 .token-view-label {
@@ -1415,6 +1575,95 @@ button:active:not(:disabled) {
 .modal-box p {
   margin: 0 0 16px;
   color: var(--muted);
+}
+
+.inspect-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  opacity: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(247, 217, 135, .12), transparent 42%),
+    rgba(0, 0, 0, .68);
+  transition: opacity .2s ease;
+}
+
+.inspect-overlay.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.inspect-card {
+  width: min(100%, 350px);
+  padding: 18px 18px 20px;
+  text-align: center;
+  transform: translateY(14px) scale(.96);
+  transition: transform .24s cubic-bezier(.2, .95, .25, 1.12);
+}
+
+.inspect-overlay.show .inspect-card {
+  transform: translateY(0) scale(1);
+}
+
+.inspect-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  height: 30px;
+  padding: 0 10px;
+  color: var(--gold);
+  border: 1px solid rgba(247, 217, 135, .62);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .24);
+  font-family: "Trebuchet MS", Arial, sans-serif;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.inspect-kicker {
+  margin: 0 42px 6px;
+  color: var(--muted);
+  font-family: "Trebuchet MS", Arial, sans-serif;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.inspect-card h2 {
+  margin: 0 0 10px;
+  color: var(--gold);
+  font-size: clamp(24px, 7vw, 32px);
+  line-height: 1;
+  text-transform: uppercase;
+  text-shadow: 0 2px 0 #4a2b0e, 0 0 16px rgba(247, 217, 135, .16);
+}
+
+.inspect-card p {
+  margin: 0;
+  color: var(--ivory);
+  font-family: "Trebuchet MS", Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.34;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
 }
 
 @media (max-width: 390px) {

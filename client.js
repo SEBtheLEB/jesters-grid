@@ -23,6 +23,31 @@ const TOKEN_TYPES = [
   { id: "parry", label: "Parry", icon: "R" }
 ];
 
+const TOKEN_DETAILS = {
+  bard: "Place on one of your 1s or 2s to turn it into a shooter. A 1 becomes a diagonal shooter and a 2 becomes a straight shooter.",
+  ammo: "Place on one of your shooters to fire a shot. Shooters are 4s, 5s, or cards empowered by Bard.",
+  pierce: "Use during a shot to let that shot destroy high cards from 10 through 13.",
+  potion: "Use on a stunned tile to clear it, or use your Witch to stun another tile.",
+  parry: "Place on one of your cards to block the next shot that would destroy it."
+};
+
+const CARD_DETAILS = {
+  1: "A low court card. Place it on an empty tile or cover lower-value cards when allowed.",
+  2: "A low court card. It can be upgraded by Bard into a straight shooter.",
+  3: "Shield cannot be covered, swept, or shot unless Armor Pierce is involved.",
+  4: "Archer is a diagonal shooter. Use Ammo Crate on it to shoot along diagonal lines.",
+  5: "Crossbow is a straight shooter. Use Ammo Crate on it to shoot along rows and columns.",
+  6: "Witch can stun a tile, stopping play and shots on that tile until cleared.",
+  7: "A strong court card for covering lower cards and building toward four in a row.",
+  8: "A strong court card for covering lower cards and controlling the grid.",
+  9: "A strong court card for covering lower cards and blocking opponent lines.",
+  10: "Banner is a high court card. It is hard to cover and can anchor a line.",
+  11: "Champion is a high court card. It pressures the board and resists most cover attempts.",
+  12: "Giant is a high court card. Only very high cards can cover it.",
+  13: "King is one of the strongest cards and can only be covered by the Jester.",
+  14: "Jester locks the tile. A locked tile cannot be covered."
+};
+
 let socket = null;
 let autoJoinAttempted = false;
 let usingHttpFallback = false;
@@ -43,11 +68,18 @@ const emptyTokenLabel = document.getElementById("emptyTokenLabel");
 const messageEl = document.getElementById("message");
 const turnLabel = document.getElementById("turnLabel");
 const handSectionTitle = document.getElementById("handSectionTitle");
+const handScrollLeft = document.getElementById("handScrollLeft");
+const handScrollRight = document.getElementById("handScrollRight");
 const tokenLimit = document.getElementById("tokenLimit");
 const cancelBtn = document.getElementById("cancelBtn");
 const winModal = document.getElementById("winModal");
 const winTitle = document.getElementById("winTitle");
 const winText = document.getElementById("winText");
+const inspectOverlay = document.getElementById("inspectOverlay");
+const inspectTitle = document.getElementById("inspectTitle");
+const inspectMeta = document.getElementById("inspectMeta");
+const inspectBody = document.getElementById("inspectBody");
+const inspectClose = document.getElementById("inspectClose");
 const settingsMenu = document.getElementById("settingsMenu");
 const tokenPanelBtn = document.getElementById("tokenPanelBtn");
 const playerNameInput = document.getElementById("playerName");
@@ -59,6 +91,11 @@ let selectedCardIndex = null;
 let selectedToken = null;
 let showingTokens = false;
 let localMessage = "";
+let renderRoomCode = "";
+let previousHandValues = [];
+let previousTokenCounts = {};
+let previousBoardTopKeys = [];
+let previousBoardTokenKeys = [];
 
 function getClientId() {
   const existing = localStorage.getItem("jg-client-id");
@@ -294,6 +331,81 @@ function getCardHint(value) {
   return "Place or cover.";
 }
 
+function getCardInspectInfo(value) {
+  return {
+    title: CARD_NAMES[value],
+    meta: `Card ${value}`,
+    body: `${CARD_DETAILS[value] || getCardHint(value)} ${getCardHint(value)}`
+  };
+}
+
+function getTokenInspectInfo(token) {
+  return {
+    title: token.label,
+    meta: "Token",
+    body: TOKEN_DETAILS[token.id] || "Use this token on a valid tile during your turn."
+  };
+}
+
+function resetRenderMemory() {
+  previousHandValues = [];
+  previousTokenCounts = {};
+  previousBoardTopKeys = [];
+  previousBoardTokenKeys = [];
+}
+
+function openInspect(info) {
+  if (!info) return;
+  inspectTitle.textContent = info.title;
+  inspectMeta.textContent = info.meta;
+  inspectBody.textContent = info.body;
+  inspectOverlay.classList.add("show");
+  inspectOverlay.setAttribute("aria-hidden", "false");
+}
+
+function closeInspect() {
+  inspectOverlay.classList.remove("show");
+  inspectOverlay.setAttribute("aria-hidden", "true");
+}
+
+function bindHoldInfo(element, getInfo) {
+  let holdTimer = null;
+  let startX = 0;
+  let startY = 0;
+
+  const clearHold = () => {
+    window.clearTimeout(holdTimer);
+    holdTimer = null;
+    element.classList.remove("is-holding");
+  };
+
+  element.addEventListener("pointerdown", (event) => {
+    if (event.button && event.button !== 0) return;
+    startX = event.clientX;
+    startY = event.clientY;
+    element.classList.add("is-holding");
+    holdTimer = window.setTimeout(() => {
+      element.dataset.suppressClick = "true";
+      element.classList.remove("is-holding");
+      openInspect(getInfo());
+    }, 520);
+  });
+
+  element.addEventListener("pointermove", (event) => {
+    if (!holdTimer) return;
+    if (Math.abs(event.clientX - startX) > 12 || Math.abs(event.clientY - startY) > 12) clearHold();
+  });
+  element.addEventListener("pointerup", clearHold);
+  element.addEventListener("pointercancel", clearHold);
+  element.addEventListener("pointerleave", clearHold);
+}
+
+function consumeHeldClick(element) {
+  if (element.dataset.suppressClick !== "true") return false;
+  delete element.dataset.suppressClick;
+  return true;
+}
+
 function canPlaceCard(index, value) {
   const game = currentGame();
   if (!game) return false;
@@ -326,6 +438,11 @@ function render() {
   if (!snapshot) {
     boardEl.innerHTML = "";
     return;
+  }
+
+  if (renderRoomCode !== snapshot.room.code) {
+    renderRoomCode = snapshot.room.code;
+    resetRenderMemory();
   }
 
   renderStatus();
@@ -375,11 +492,19 @@ function renderStatus() {
 
 function renderBoard() {
   const game = currentGame();
+  const hadBoardMemory = previousBoardTopKeys.length > 0;
+  const nextTopKeys = [];
+  const nextTokenKeys = [];
   boardEl.innerHTML = "";
   game.board.forEach((tile, index) => {
     const tileEl = document.createElement("button");
     tileEl.className = "tile";
     const top = topCard(tile);
+    const topKey = top ? `${top.owner}:${top.value}:${tile.stack.length}:${tile.locked}:${top.stunned}:${tile.stunTurns}` : "empty";
+    const tokenKeys = tile.tokens.map((token, tokenIndex) => String(token.id ?? `${token.owner}-${token.type}-${tokenIndex}`));
+    const previousTileTokens = new Set(previousBoardTokenKeys[index] || []);
+    nextTopKeys[index] = topKey;
+    nextTokenKeys[index] = tokenKeys;
 
     if (tile.stunTurns > 0 || top?.stunned) tileEl.classList.add("stunned");
     if (game.lastPlacedTileIndex === index) tileEl.classList.add("last-placed");
@@ -389,6 +514,7 @@ function renderBoard() {
     if (top) {
       const card = document.createElement("div");
       card.className = `card p${top.owner}-card`;
+      if (hadBoardMemory && previousBoardTopKeys[index] !== topKey) card.classList.add("card-placed");
       if (top.value === 14 || tile.locked) card.classList.add("locked");
       if (top.stunned || tile.stunTurns > 0) card.classList.add("stunned");
       if (game.pendingShot && game.pendingShot.fromIndex === index) card.classList.add("shooter-ready");
@@ -401,9 +527,11 @@ function renderBoard() {
 
       const strip = document.createElement("div");
       strip.className = "token-strip";
-      tile.tokens.forEach((token) => {
+      tile.tokens.forEach((token, tokenIndex) => {
         const marker = document.createElement("span");
         marker.className = "mini-token";
+        const tokenKey = String(token.id ?? `${token.owner}-${token.type}-${tokenIndex}`);
+        if (hadBoardMemory && !previousTileTokens.has(tokenKey)) marker.classList.add("token-added");
         marker.textContent = TOKEN_TYPES.find((item) => item.id === token.type)?.icon || "?";
         strip.appendChild(marker);
       });
@@ -414,24 +542,32 @@ function renderBoard() {
     tileEl.addEventListener("click", () => onTileClick(index));
     boardEl.appendChild(tileEl);
   });
+  previousBoardTopKeys = nextTopKeys;
+  previousBoardTokenKeys = nextTokenKeys;
 }
 
 function renderHand() {
   const game = currentGame();
   const player = myPlayer();
+  const hadHandMemory = previousHandValues.length > 0;
   handEl.innerHTML = "";
   handEl.classList.toggle("needs-card-glow", isMyTurn() && !game.cardPlacedThisTurn && !game.extraCardPlacement && !game.pendingShot && game.pendingWitchTile === null);
 
   if (!player) {
     handEl.innerHTML = `<div class="token-view-label show">Spectating</div>`;
+    previousHandValues = [];
     return;
   }
 
   player.hand.forEach((value, index) => {
     const card = document.createElement("button");
     card.className = `hand-card p${player.id}-card`;
+    card.style.setProperty("--draw-order", index);
+    if (!hadHandMemory || previousHandValues[index] !== value) card.classList.add("drawn-card");
     if (selectedCardIndex === index) card.classList.add("selected");
-    card.disabled = !isMyTurn() || !!game.pendingShot || game.pendingWitchTile !== null;
+    const isUnavailable = !isMyTurn() || !!game.pendingShot || game.pendingWitchTile !== null;
+    card.classList.toggle("is-disabled", isUnavailable);
+    card.setAttribute("aria-disabled", String(isUnavailable));
     card.innerHTML = `
       <div class="power-badge">${value}</div>
       <div class="suit-badge">JG</div>
@@ -439,8 +575,9 @@ function renderHand() {
       <div class="hand-name">${CARD_NAMES[value]}</div>
       <div class="hand-rules">${getCardHint(value)}</div>
     `;
+    bindHoldInfo(card, () => getCardInspectInfo(value));
     card.addEventListener("click", () => {
-      if (card.disabled) return;
+      if (consumeHeldClick(card) || isUnavailable) return;
       selectedCardIndex = selectedCardIndex === index ? null : index;
       selectedToken = null;
       showingTokens = false;
@@ -448,28 +585,39 @@ function renderHand() {
     });
     handEl.appendChild(card);
   });
+  previousHandValues = [...player.hand];
 }
 
 function renderTokens() {
   const game = currentGame();
   const player = myPlayer();
+  const nextTokenCounts = {};
   tokensEl.innerHTML = "";
 
-  if (!player) return;
+  if (!player) {
+    previousTokenCounts = {};
+    return;
+  }
 
   TOKEN_TYPES.forEach((token) => {
     const button = document.createElement("button");
     const available = player.tokens[token.id] || 0;
+    nextTokenCounts[token.id] = available;
     button.className = "token-button";
+    button.style.setProperty("--draw-order", TOKEN_TYPES.findIndex((item) => item.id === token.id));
+    if (previousTokenCounts[token.id] !== undefined && previousTokenCounts[token.id] !== available) button.classList.add("token-changed");
     button.innerHTML = `
       <span class="token-icon">${token.icon}</span>
       <span class="token-name">${token.label}</span>
       <span class="token-count">x${available}</span>
     `;
-    button.disabled = !isMyTurn() || available <= 0 || game.tokensUsed >= 2 || (game.pendingShot && token.id !== "pierce") || game.pendingWitchTile !== null;
+    const isUnavailable = !isMyTurn() || available <= 0 || game.tokensUsed >= 2 || (game.pendingShot && token.id !== "pierce") || game.pendingWitchTile !== null;
+    button.classList.toggle("is-disabled", isUnavailable);
+    button.setAttribute("aria-disabled", String(isUnavailable));
     if (selectedToken === token.id) button.classList.add("selected");
+    bindHoldInfo(button, () => getTokenInspectInfo(token));
     button.addEventListener("click", () => {
-      if (button.disabled) return;
+      if (consumeHeldClick(button) || isUnavailable) return;
       if (game.pendingShot && token.id === "pierce") {
         sendAction({ type: "armorPierce" });
         return;
@@ -481,6 +629,7 @@ function renderTokens() {
     });
     tokensEl.appendChild(button);
   });
+  previousTokenCounts = nextTokenCounts;
 }
 
 function renderTokenView() {
@@ -490,9 +639,31 @@ function renderTokenView() {
   if (handSectionTitle) handSectionTitle.textContent = showingTokens ? "Token Pouch" : "Your Hand";
   const pouchTitle = tokenPanelBtn.querySelector(".pouch-title");
   if (pouchTitle) pouchTitle.textContent = showingTokens ? "Cards" : "Tokens";
+  handScrollLeft.setAttribute("aria-label", showingTokens ? "Scroll tokens left" : "Scroll cards left");
+  handScrollRight.setAttribute("aria-label", showingTokens ? "Scroll tokens right" : "Scroll cards right");
   tokenPanelBtn.classList.toggle("is-open", showingTokens);
   tokenPanelBtn.setAttribute("aria-pressed", String(showingTokens));
   tokenPanelBtn.setAttribute("aria-label", showingTokens ? "Close token pouch" : "Open token pouch");
+}
+
+function activeRail() {
+  return showingTokens && !tokensEl.classList.contains("hidden") ? tokensEl : handEl;
+}
+
+function scrollActiveRail(direction) {
+  const rail = activeRail();
+  rail.scrollBy({
+    left: direction * Math.max(120, rail.clientWidth * .78),
+    behavior: "smooth"
+  });
+}
+
+function bindHorizontalWheel(element) {
+  element.addEventListener("wheel", (event) => {
+    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    event.preventDefault();
+    element.scrollBy({ left: event.deltaY, behavior: "auto" });
+  }, { passive: false });
 }
 
 function renderWin() {
@@ -617,11 +788,22 @@ document.getElementById("resetBtn").addEventListener("click", () => {
 });
 document.getElementById("endTurnBtn").addEventListener("click", () => sendAction({ type: "endTurn" }));
 document.getElementById("cancelBtn").addEventListener("click", () => sendAction({ type: "cancel" }));
+handScrollLeft.addEventListener("click", () => scrollActiveRail(-1));
+handScrollRight.addEventListener("click", () => scrollActiveRail(1));
+bindHorizontalWheel(handEl);
+bindHorizontalWheel(tokensEl);
 tokenPanelBtn.addEventListener("click", () => {
   showingTokens = !showingTokens;
   selectedCardIndex = null;
   selectedToken = null;
   render();
+});
+inspectClose.addEventListener("click", closeInspect);
+inspectOverlay.addEventListener("click", (event) => {
+  if (event.target === inspectOverlay) closeInspect();
+});
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeInspect();
 });
 document.getElementById("themeGear").addEventListener("click", () => settingsMenu.classList.toggle("open"));
 document.getElementById("settingsThemeBtn").addEventListener("click", () => {

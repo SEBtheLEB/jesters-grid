@@ -106,9 +106,15 @@
           </div>
           <div class="hand-stage">
             <div class="hand-scroll">
+              <button id="handScrollLeft" class="hand-scroll-btn hand-scroll-left" aria-label="Scroll cards left">
+                <span aria-hidden="true">&lt;</span>
+              </button>
               <div id="hand" class="hand"></div>
               <div id="tokens" class="tokens hidden"></div>
               <div id="emptyTokenLabel" class="token-view-label">No tokens available</div>
+              <button id="handScrollRight" class="hand-scroll-btn hand-scroll-right" aria-label="Scroll cards right">
+                <span aria-hidden="true">&gt;</span>
+              </button>
             </div>
             <button id="tokenPanelBtn" class="token-toggle" aria-label="Open token pouch" aria-pressed="false">
               <span class="pouch-ornament" aria-hidden="true"></span>
@@ -152,6 +158,15 @@
         <h2 id="winTitle">Player Wins!</h2>
         <p id="winText">Four in a row.</p>
         <button id="playAgainBtn" class="big-button">Play Again</button>
+      </div>
+    </div>
+
+    <div id="inspectOverlay" class="inspect-overlay" aria-hidden="true">
+      <div class="inspect-card fantasy-panel" role="dialog" aria-modal="true" aria-labelledby="inspectTitle">
+        <button id="inspectClose" class="inspect-close" aria-label="Close information">Close</button>
+        <div class="inspect-kicker" id="inspectMeta">Card</div>
+        <h2 id="inspectTitle">Jester's Grid</h2>
+        <p id="inspectBody">Hold a card or token to inspect it.</p>
       </div>
     </div>
   </main>
