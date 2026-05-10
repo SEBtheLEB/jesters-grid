@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Jester's Grid</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body data-theme="dark">
+  <main class="phone">
+    <section id="menuScreen" class="screen active">
+      <div class="menu-content">
+        <div class="logo">
+          <h1>Jester's<br>Grid</h1>
+          <span>TACTICAL CARD DUEL</span>
+        </div>
+        <div class="hero-card" aria-hidden="true">
+          <div class="hat"></div>
+          <div class="hero-face"></div>
+        </div>
+        <div class="lobby-panel fantasy-panel">
+          <label class="field-label" for="playerName">Name</label>
+          <input id="playerName" class="text-input" maxlength="18" autocomplete="nickname" value="Jester" />
+          <button class="big-button" id="createRoomBtn">Create Duel</button>
+          <div class="join-row">
+            <input id="roomCodeInput" class="text-input" maxlength="6" placeholder="CODE" autocomplete="off" />
+            <button class="small-button" id="joinRoomBtn">Join</button>
+          </div>
+          <p id="menuStatus" class="status-copy">Connect to start a 1v1 room.</p>
+        </div>
+        <div class="menu-buttons">
+          <button class="small-button" id="rulesBtn">Rules</button>
+          <button class="small-button red" id="resetBtn">New Match</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="gameScreen" class="screen">
+      <header class="match-header">
+        <button class="icon-medallion" id="backToMenu" aria-label="Back to menu">Menu</button>
+        <div class="match-title">Jester's Grid</div>
+        <button class="settings-button" id="themeGear" aria-label="Settings">Gear</button>
+        <div id="settingsMenu" class="settings-menu">
+          <button class="settings-item" id="copyInviteBtn">Copy Invite</button>
+          <button class="settings-item" id="settingsStatusBtn">Status</button>
+          <button class="settings-item" id="settingsHistoryBtn">Match History</button>
+          <button class="settings-item" id="settingsTutorialBtn">Tutorial</button>
+          <button class="settings-item" id="settingsThemeBtn">Toggle Theme</button>
+        </div>
+      </header>
+
+      <div class="room-strip fantasy-panel">
+        <span id="roomCodeDisplay">Room ----</span>
+        <span id="seatLabel">Connecting</span>
+        <span id="onlineStatus">Offline</span>
+      </div>
+
+      <div class="game-area">
+        <section class="opponent-panel fantasy-panel">
+          <div class="avatar-frame">P2</div>
+          <div class="identity-block">
+            <div class="identity-name" id="opponentName">Waiting</div>
+            <div class="identity-title" id="opponentTitle">Opponent</div>
+            <div class="stat-line">
+              <span>HP 20</span>
+              <span id="opponentInfo">Cards 0 - Tokens 0</span>
+            </div>
+            <div class="opponent-cards" id="opponentCards"></div>
+          </div>
+          <div class="resource-chip"><span id="opponentDeck">Deck 0</span></div>
+        </section>
+
+        <section class="message-bar fantasy-panel" id="message">Create or join a room.</section>
+
+        <section class="board-frame fantasy-panel">
+          <div class="board-wrap"><div id="board" class="board"></div></div>
+        </section>
+
+        <section class="player-panel fantasy-panel">
+          <div class="avatar-frame">You</div>
+          <div class="identity-block">
+            <div class="identity-name" id="playerNameLabel">You</div>
+            <div class="identity-title" id="playerTitle">Jester Initiate</div>
+            <div class="player-meters">
+              <span class="meter-chip">HP 20</span>
+              <span class="meter-chip" id="playerInfo">Cards 0 - Tokens 0</span>
+              <span class="meter-chip" id="playerDeck">Deck 0</span>
+            </div>
+          </div>
+          <div class="player-actions">
+            <button id="endTurnBtn" class="action-button" aria-label="End turn">End</button>
+            <button id="cancelBtn" class="action-button secondary">Cancel</button>
+            <button id="tokenPanelBtn" class="token-toggle">Tokens</button>
+          </div>
+        </section>
+
+        <section class="hand-panel">
+          <div class="section-label">
+            <span id="turnLabel">Waiting</span>
+            <span id="tokenLimit">Tokens: 0/2</span>
+          </div>
+          <div id="hand" class="hand"></div>
+          <div id="tokens" class="tokens hidden"></div>
+          <div id="emptyTokenLabel" class="token-view-label">No tokens available</div>
+        </section>
+      </div>
+    </section>
+
+    <section id="rulesScreen" class="screen">
+      <header class="match-header">
+        <button class="icon-medallion" id="backRules" aria-label="Back">Back</button>
+        <div class="match-title">Rules</div>
+        <div></div>
+      </header>
+      <div class="rules-scroll fantasy-panel">
+        <h2>Online Duel</h2>
+        <p>Each room seats two players. The server owns the deck, hands, turns, token use, shots, stuns, sweeps, locks, and win checks.</p>
+        <h3>Basics</h3>
+        <ul>
+          <li>At the start of your turn, draw until you have 6 cards if your deck has enough cards.</li>
+          <li>You must place exactly 1 card before ending your turn.</li>
+          <li>You may use up to 2 tokens on your turn.</li>
+          <li>Cards can be placed on empty tiles or over lower-numbered cards.</li>
+          <li>3 cannot be covered, swept, or shot unless Armor Pierce is used for the shot.</li>
+          <li>Stunned tiles cannot be played on or shot.</li>
+          <li>Four top cards in a row wins.</li>
+        </ul>
+      </div>
+    </section>
+
+    <div id="winModal" class="modal">
+      <div class="modal-box">
+        <h2 id="winTitle">Player Wins!</h2>
+        <p id="winText">Four in a row.</p>
+        <button id="playAgainBtn" class="big-button">Play Again</button>
+      </div>
+    </div>
+  </main>
+
+  <script src="/client.js"></script>
+</body>
+</html>
