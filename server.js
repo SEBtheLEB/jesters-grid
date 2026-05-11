@@ -27,6 +27,7 @@ const TOKEN_TYPES = [
   { id: "potion", count: 2 },
   { id: "parry", count: 1 }
 ];
+const VISUAL_RANKS = ["Jester Initiate", "Masked Challenger"];
 const WIN_LINES = [
   [0, 1, 2, 3],
   [4, 5, 6, 7],
@@ -109,15 +110,7 @@ async function handleApiRequest(req, res, url) {
     if (url.pathname === "/api/create-room") {
       const code = createRoomCode();
       const clientId = cleanClientId(body.clientId);
-      const room = {
-        code,
-        createdAt: Date.now(),
-        players: [
-          makeSeat(1, cleanName(body.name, "Player 1"), clientId),
-          makeSeat(2, "Player 2", null)
-        ],
-        game: newGame()
-      };
+      const room = createRoomState(code, cleanName(body.name, "Player 1"), clientId);
       rooms.set(code, room);
       sendJsonResponse(res, { ok: true, code, seat: 0, snapshot: snapshotFor(room, 0) });
       return;
@@ -130,6 +123,7 @@ async function handleApiRequest(req, res, url) {
         return;
       }
       const seat = claimSeat(room, cleanClientId(body.clientId), body.name);
+      emitRoom(room);
       sendJsonResponse(res, { ok: true, code: room.code, seat, snapshot: snapshotFor(room, seat) });
       return;
     }
@@ -142,6 +136,7 @@ async function handleApiRequest(req, res, url) {
       }
       const seat = resolveSeat(room, body.clientId, body.seat);
       const result = performAction(room, seat, body.action || {});
+      if (result.ok) emitRoom(room);
       sendJsonResponse(res, { ...result, snapshot: snapshotFor(room, seat) });
       return;
     }
@@ -307,15 +302,7 @@ function handleClientMessage(client, raw) {
   const { id, event, payload } = message;
   if (event === "createRoom") {
     const code = createRoomCode();
-    const room = {
-      code,
-      createdAt: Date.now(),
-      players: [
-        makeSeat(1, cleanName(payload?.name, "Player 1"), client.id),
-        makeSeat(2, "Player 2", null)
-      ],
-      game: newGame()
-    };
+    const room = createRoomState(code, cleanName(payload?.name, "Player 1"), client.id);
     rooms.set(code, room);
     client.roomCode = code;
     client.seat = 0;
@@ -406,8 +393,10 @@ function handleClientDisconnect(client) {
   if (!room) return;
   const player = room.players.find((seat) => seat.socketId === client.id);
   if (player) {
+    const seatIndex = room.players.indexOf(player);
     player.socketId = null;
     player.connected = false;
+    if (seatIndex >= 0 && room.phase !== "playing") room.ready[seatIndex] = false;
     setMessage(room.game, `${player.name} disconnected.`);
     emitRoom(room);
   }
@@ -415,6 +404,22 @@ function handleClientDisconnect(client) {
 
 function makeSeat(id, name, socketId) {
   return { id, name, socketId, connected: !!socketId };
+}
+
+function createRoomState(code, playerName, socketId) {
+  return {
+    code,
+    phase: "waiting",
+    ready: [false, false],
+    createdAt: Date.now(),
+    joinedAt: null,
+    startedAt: null,
+    players: [
+      makeSeat(1, playerName, socketId),
+      makeSeat(2, "Player 2", null)
+    ],
+    game: newGame(false)
+  };
 }
 
 function cleanClientId(value) {
@@ -440,6 +445,8 @@ function claimSeat(room, socketId, name) {
     room.players[openIndex].socketId = socketId;
     room.players[openIndex].connected = true;
     room.players[openIndex].name = cleanName(name, `Player ${openIndex + 1}`);
+    if (room.phase !== "playing") room.ready[openIndex] = false;
+    room.joinedAt = Date.now();
     setMessage(room.game, `${room.players[openIndex].name} joined as Player ${openIndex + 1}.`);
     return openIndex;
   }
@@ -473,7 +480,13 @@ function emitRoom(room) {
 
 function snapshotFor(room, seat) {
   return {
-    room: { code: room.code },
+    room: {
+      code: room.code,
+      phase: room.phase,
+      ready: room.ready,
+      joinedAt: room.joinedAt,
+      startedAt: room.startedAt
+    },
     you: { seat },
     game: {
       board: room.game.board,
@@ -481,6 +494,8 @@ function snapshotFor(room, seat) {
         id: player.id,
         name: room.players[index]?.name || `Player ${index + 1}`,
         connected: room.players[index]?.connected || false,
+        ready: room.ready[index] || false,
+        rank: VISUAL_RANKS[index] || "Court Duelist",
         hand: seat === index ? player.hand : null,
         handCount: player.hand.length,
         deckCount: player.deck.length,
@@ -514,7 +529,7 @@ function createPlayer(id) {
   return { id, deck, hand: [], tokens };
 }
 
-function newGame() {
+function newGame(dealHands = true) {
   const game = {
     board: Array.from({ length: 16 }, emptyTile),
     players: [createPlayer(1), createPlayer(2)],
@@ -529,10 +544,12 @@ function newGame() {
     lastPlacedTileIndex: null,
     placedTokensThisTurn: [],
     nextTokenId: 1,
-    lastMessage: "Choose a card, then tap a tile to place it. Player 1 starts."
+    lastMessage: dealHands ? "Choose a card, then tap a tile to place it. Player 1 starts." : "Waiting for both duelists to ready up."
   };
-  drawUpToSix(game.players[0]);
-  drawUpToSix(game.players[1]);
+  if (dealHands) {
+    drawUpToSix(game.players[0]);
+    drawUpToSix(game.players[1]);
+  }
   return game;
 }
 
@@ -566,16 +583,36 @@ function countTokens(player) {
   return Object.values(player.tokens).reduce((total, value) => total + value, 0);
 }
 
+function startMatch(room) {
+  room.phase = "playing";
+  room.startedAt = Date.now();
+  room.game = newGame(true);
+  setMessage(room.game, "Both duelists are ready. Player 1 starts.");
+}
+
 function performAction(room, seat, action) {
   const game = room.game;
   if (action.type === "restart") {
     if (seat !== 0 && seat !== 1) return fail("Only seated players can restart.");
-    room.game = newGame();
-    setMessage(room.game, "New match started.");
+    room.phase = "waiting";
+    room.ready = [false, false];
+    room.startedAt = null;
+    room.game = newGame(false);
+    setMessage(room.game, "New match waiting for both duelists.");
     return ok();
   }
 
   if (seat !== 0 && seat !== 1) return fail("Spectators cannot move.");
+  if (action.type === "ready") {
+    if (!room.players.every((player) => player.connected)) return fail("Wait for both duelists to connect.");
+    if (room.phase === "playing") return ok("Match already started.");
+    room.ready[seat] = true;
+    setMessage(game, `${room.players[seat].name} is ready.`);
+    if (room.ready[0] && room.ready[1]) startMatch(room);
+    return ok();
+  }
+
+  if (room.phase !== "playing") return fail("Both duelists must ready up before the match begins.");
   if (game.gameOver) return fail("The match is over.");
   if (seat !== game.current) return fail(`Waiting for Player ${game.current + 1}.`);
 

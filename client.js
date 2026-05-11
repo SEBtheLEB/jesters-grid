@@ -61,6 +61,16 @@ const screens = {
   rules: document.getElementById("rulesScreen")
 };
 
+const gameShell = document.getElementById("gameShell");
+const waitingRoom = document.getElementById("waitingRoom");
+const waitingRoomCode = document.getElementById("waitingRoomCode");
+const waitingCopyInvite = document.getElementById("waitingCopyInvite");
+const waitingStatus = document.getElementById("waitingStatus");
+const waitingJoinBanner = document.getElementById("waitingJoinBanner");
+const readyBtn = document.getElementById("readyBtn");
+const turnIntroOverlay = document.getElementById("turnIntroOverlay");
+const turnIntroText = document.getElementById("turnIntroText");
+const turnIntroKicker = document.getElementById("turnIntroKicker");
 const boardEl = document.getElementById("board");
 const handEl = document.getElementById("hand");
 const tokensEl = document.getElementById("tokens");
@@ -68,8 +78,6 @@ const emptyTokenLabel = document.getElementById("emptyTokenLabel");
 const messageEl = document.getElementById("message");
 const turnLabel = document.getElementById("turnLabel");
 const handSectionTitle = document.getElementById("handSectionTitle");
-const handScrollLeft = document.getElementById("handScrollLeft");
-const handScrollRight = document.getElementById("handScrollRight");
 const tokenLimit = document.getElementById("tokenLimit");
 const cancelBtn = document.getElementById("cancelBtn");
 const winModal = document.getElementById("winModal");
@@ -96,6 +104,10 @@ let previousHandValues = [];
 let previousTokenCounts = {};
 let previousBoardTopKeys = [];
 let previousBoardTokenKeys = [];
+let previousRoomPhase = "";
+let previousPlayerTwoConnected = false;
+let previousShowingTokens = false;
+let introTimer = null;
 
 function getClientId() {
   const existing = localStorage.getItem("jg-client-id");
@@ -129,6 +141,16 @@ function setMenuStatus(text) {
 function setLocalMessage(text) {
   localMessage = text;
   render();
+}
+
+function isMatchPlaying() {
+  return snapshot?.room?.phase === "playing";
+}
+
+function playerInitials(name, fallback) {
+  const cleaned = String(name || fallback || "").trim();
+  if (!cleaned) return fallback;
+  return cleaned.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 }
 
 function socketOpen() {
@@ -443,6 +465,26 @@ function render() {
   if (renderRoomCode !== snapshot.room.code) {
     renderRoomCode = snapshot.room.code;
     resetRenderMemory();
+    previousRoomPhase = "";
+    previousPlayerTwoConnected = false;
+  }
+
+  const phase = snapshot.room.phase || "playing";
+  const phaseChanged = previousRoomPhase !== phase;
+  if (phaseChanged) {
+    resetRenderMemory();
+    previousShowingTokens = false;
+  }
+
+  renderWaitingRoom();
+  const playing = isMatchPlaying();
+  waitingRoom.classList.toggle("show", !playing);
+  gameShell.classList.toggle("hidden", !playing);
+
+  if (!playing) {
+    previousRoomPhase = phase;
+    renderWin();
+    return;
   }
 
   renderStatus();
@@ -451,6 +493,49 @@ function render() {
   renderTokens();
   renderTokenView();
   renderWin();
+  if (phaseChanged) showTurnIntro();
+  previousRoomPhase = phase;
+}
+
+function renderWaitingRoom() {
+  if (!snapshot) return;
+  const players = snapshot.game.players;
+  const playerOne = players[0];
+  const playerTwo = players[1];
+  const bothConnected = players.every((player) => player.connected);
+  const seat = mySeat();
+  const myPlayerState = seat === 0 || seat === 1 ? players[seat] : null;
+  const playerTwoJustJoined = playerTwo.connected && !previousPlayerTwoConnected;
+
+  waitingRoomCode.textContent = snapshot.room.code;
+  document.getElementById("waitingNameOne").textContent = playerOne.name || "Player 1";
+  document.getElementById("waitingNameTwo").textContent = playerTwo.connected ? (playerTwo.name || "Player 2") : "Awaiting Player";
+  document.getElementById("waitingRankOne").textContent = playerOne.rank || "Jester Initiate";
+  document.getElementById("waitingRankTwo").textContent = playerTwo.rank || "Masked Challenger";
+  document.getElementById("waitingAvatarOne").textContent = playerInitials(playerOne.name, "P1");
+  document.getElementById("waitingAvatarTwo").textContent = playerTwo.connected ? playerInitials(playerTwo.name, "P2") : "P2";
+  document.getElementById("waitingReadyOne").textContent = playerOne.ready ? "Ready" : "Waiting";
+  document.getElementById("waitingReadyTwo").textContent = playerTwo.ready ? "Ready" : "Waiting";
+  document.getElementById("waitingReadyOne").classList.toggle("ready", playerOne.ready);
+  document.getElementById("waitingReadyTwo").classList.toggle("ready", playerTwo.ready);
+  document.getElementById("waitingPlayerOne").classList.toggle("connected", playerOne.connected);
+  document.getElementById("waitingPlayerTwo").classList.toggle("connected", playerTwo.connected);
+  document.getElementById("waitingPlayerTwo").classList.toggle("joined-now", playerTwoJustJoined);
+  waitingJoinBanner.classList.toggle("show", playerTwoJustJoined || (playerTwo.connected && !playerTwo.ready));
+
+  if (!bothConnected) {
+    waitingStatus.textContent = "Share the code. The duel begins after both players ready up.";
+  } else if (players.every((player) => player.ready)) {
+    waitingStatus.textContent = "Both duelists are ready. Opening the board...";
+  } else if (myPlayerState?.ready) {
+    waitingStatus.textContent = "You are ready. Waiting for your opponent.";
+  } else {
+    waitingStatus.textContent = "Both players are here. Tap Ready to begin.";
+  }
+
+  readyBtn.disabled = !bothConnected || !myPlayerState || myPlayerState.ready;
+  readyBtn.textContent = myPlayerState?.ready ? "Ready Locked" : "Ready";
+  previousPlayerTwoConnected = playerTwo.connected;
 }
 
 function renderStatus() {
@@ -605,6 +690,7 @@ function renderTokens() {
     nextTokenCounts[token.id] = available;
     button.className = "token-button";
     button.style.setProperty("--draw-order", TOKEN_TYPES.findIndex((item) => item.id === token.id));
+    if (showingTokens && !previousShowingTokens) button.classList.add("token-enter");
     if (previousTokenCounts[token.id] !== undefined && previousTokenCounts[token.id] !== available) button.classList.add("token-changed");
     button.innerHTML = `
       <span class="token-icon">${token.icon}</span>
@@ -639,23 +725,10 @@ function renderTokenView() {
   if (handSectionTitle) handSectionTitle.textContent = showingTokens ? "Token Pouch" : "Your Hand";
   const pouchTitle = tokenPanelBtn.querySelector(".pouch-title");
   if (pouchTitle) pouchTitle.textContent = showingTokens ? "Cards" : "Tokens";
-  handScrollLeft.setAttribute("aria-label", showingTokens ? "Scroll tokens left" : "Scroll cards left");
-  handScrollRight.setAttribute("aria-label", showingTokens ? "Scroll tokens right" : "Scroll cards right");
   tokenPanelBtn.classList.toggle("is-open", showingTokens);
   tokenPanelBtn.setAttribute("aria-pressed", String(showingTokens));
   tokenPanelBtn.setAttribute("aria-label", showingTokens ? "Close token pouch" : "Open token pouch");
-}
-
-function activeRail() {
-  return showingTokens && !tokensEl.classList.contains("hidden") ? tokensEl : handEl;
-}
-
-function scrollActiveRail(direction) {
-  const rail = activeRail();
-  rail.scrollBy({
-    left: direction * Math.max(120, rail.clientWidth * .78),
-    behavior: "smooth"
-  });
+  previousShowingTokens = showingTokens;
 }
 
 function bindHorizontalWheel(element) {
@@ -664,6 +737,35 @@ function bindHorizontalWheel(element) {
     event.preventDefault();
     element.scrollBy({ left: event.deltaY, behavior: "auto" });
   }, { passive: false });
+}
+
+function showTurnIntro() {
+  const game = currentGame();
+  const seat = mySeat();
+  let text = "The duel begins.";
+  let kicker = "Match Begins";
+  if (seat === game.current) {
+    text = "You go first.";
+    kicker = "First Move";
+  } else if (seat === 0 || seat === 1) {
+    text = "You go second.";
+    kicker = "Second Move";
+  } else {
+    text = `Player ${game.current + 1} goes first.`;
+    kicker = "Spectating";
+  }
+
+  window.clearTimeout(introTimer);
+  turnIntroKicker.textContent = kicker;
+  turnIntroText.textContent = text;
+  gameShell.classList.add("intro-blur");
+  turnIntroOverlay.classList.add("show");
+  turnIntroOverlay.setAttribute("aria-hidden", "false");
+  introTimer = window.setTimeout(() => {
+    turnIntroOverlay.classList.remove("show");
+    turnIntroOverlay.setAttribute("aria-hidden", "true");
+    gameShell.classList.remove("intro-blur");
+  }, 2300);
 }
 
 function renderWin() {
@@ -788,10 +890,10 @@ document.getElementById("resetBtn").addEventListener("click", () => {
 });
 document.getElementById("endTurnBtn").addEventListener("click", () => sendAction({ type: "endTurn" }));
 document.getElementById("cancelBtn").addEventListener("click", () => sendAction({ type: "cancel" }));
-handScrollLeft.addEventListener("click", () => scrollActiveRail(-1));
-handScrollRight.addEventListener("click", () => scrollActiveRail(1));
 bindHorizontalWheel(handEl);
 bindHorizontalWheel(tokensEl);
+readyBtn.addEventListener("click", () => sendAction({ type: "ready" }, false));
+waitingCopyInvite.addEventListener("click", copyInvite);
 tokenPanelBtn.addEventListener("click", () => {
   showingTokens = !showingTokens;
   selectedCardIndex = null;

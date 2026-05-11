@@ -40,7 +40,48 @@
     </section>
 
     <section id="gameScreen" class="screen">
-      <div class="game-shell">
+      <section id="waitingRoom" class="waiting-room">
+        <div class="waiting-shell">
+          <header class="waiting-title">
+            <span>Private Duel</span>
+            <h2>Waiting Room</h2>
+          </header>
+
+          <section class="waiting-code fantasy-panel">
+            <span>Room Code</span>
+            <strong id="waitingRoomCode">-----</strong>
+            <button id="waitingCopyInvite" class="small-button">Copy Invite</button>
+          </section>
+
+          <section class="waiting-duelists">
+            <article id="waitingPlayerOne" class="waiting-player fantasy-panel">
+              <div class="waiting-avatar" id="waitingAvatarOne">P1</div>
+              <div class="waiting-player-copy">
+                <strong id="waitingNameOne">Player 1</strong>
+                <span id="waitingRankOne">Jester Initiate</span>
+              </div>
+              <span id="waitingReadyOne" class="ready-pill">Waiting</span>
+            </article>
+
+            <div class="versus-mark">VS</div>
+
+            <article id="waitingPlayerTwo" class="waiting-player fantasy-panel">
+              <div class="waiting-avatar" id="waitingAvatarTwo">P2</div>
+              <div class="waiting-player-copy">
+                <strong id="waitingNameTwo">Awaiting Player</strong>
+                <span id="waitingRankTwo">Masked Challenger</span>
+              </div>
+              <span id="waitingReadyTwo" class="ready-pill">Waiting</span>
+            </article>
+          </section>
+
+          <div id="waitingJoinBanner" class="join-banner">Player 2 has joined the court.</div>
+          <p id="waitingStatus" class="waiting-status">Share the room code with your opponent.</p>
+          <button id="readyBtn" class="big-button ready-button">Ready</button>
+        </div>
+      </section>
+
+      <div id="gameShell" class="game-shell">
         <header class="top-hud">
           <div class="match-header">
             <button class="icon-medallion" id="backToMenu" aria-label="Back to menu">Menu</button>
@@ -106,15 +147,9 @@
           </div>
           <div class="hand-stage">
             <div class="hand-scroll">
-              <button id="handScrollLeft" class="hand-scroll-btn hand-scroll-left" aria-label="Scroll cards left">
-                <span aria-hidden="true">&lt;</span>
-              </button>
               <div id="hand" class="hand"></div>
               <div id="tokens" class="tokens hidden"></div>
               <div id="emptyTokenLabel" class="token-view-label">No tokens available</div>
-              <button id="handScrollRight" class="hand-scroll-btn hand-scroll-right" aria-label="Scroll cards right">
-                <span aria-hidden="true">&gt;</span>
-              </button>
             </div>
             <button id="tokenPanelBtn" class="token-toggle" aria-label="Open token pouch" aria-pressed="false">
               <span class="pouch-ornament" aria-hidden="true"></span>
@@ -128,6 +163,13 @@
           <button id="endTurnBtn" class="action-button" aria-label="End turn">End Turn</button>
           <button id="cancelBtn" class="action-button secondary">Cancel</button>
         </nav>
+      </div>
+
+      <div id="turnIntroOverlay" class="turn-intro-overlay" aria-hidden="true">
+        <div class="turn-intro-card fantasy-panel">
+          <span id="turnIntroKicker">Match Begins</span>
+          <strong id="turnIntroText">You go first.</strong>
+        </div>
       </div>
     </section>
 
