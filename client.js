@@ -109,6 +109,9 @@ let draggedCard = null;
 let tokenDragCandidate = null;
 let draggedToken = null;
 let suppressPieceClickUntil = 0;
+let remoteDragPreview = null;
+let remoteDragPreviewTimer = null;
+let lastSentCardDragTile = null;
 let localMessage = "";
 let renderRoomCode = "";
 let previousHandValues = [];
@@ -222,6 +225,26 @@ function connectRealtime() {
       snapshot = message.snapshot;
       localMessage = "";
       render();
+      return;
+    }
+
+    if (message.type === "dragPreview") {
+      const preview = message.preview || {};
+      if (preview.seat === mySeat()) return;
+      window.clearTimeout(remoteDragPreviewTimer);
+      if (!preview.active) {
+        remoteDragPreview = null;
+      } else {
+        remoteDragPreview = {
+          seat: preview.seat,
+          tileIndex: Number.isInteger(preview.tileIndex) ? preview.tileIndex : null
+        };
+        remoteDragPreviewTimer = window.setTimeout(() => {
+          remoteDragPreview = null;
+          renderBoard();
+        }, 1800);
+      }
+      renderBoard();
     }
   });
 
@@ -259,6 +282,23 @@ function sendEvent(event, payload, callback) {
     pendingReplies.delete(id);
     callback?.({ ok: false, message: "The server did not answer in time." });
   }, 8000);
+}
+
+function sendCardDragPreview(tileIndex, active = true) {
+  if (!socketOpen() || !snapshot?.room?.code) return;
+  const normalizedTile = Number.isInteger(tileIndex) ? tileIndex : null;
+  if (active && normalizedTile === lastSentCardDragTile) return;
+  lastSentCardDragTile = active ? normalizedTile : null;
+  socket.send(JSON.stringify({
+    event: "dragPreview",
+    payload: {
+      clientId,
+      code: snapshot.room.code,
+      seat: mySeat(),
+      active,
+      tileIndex: normalizedTile
+    }
+  }));
 }
 
 function rejoinActiveRoom() {
@@ -672,7 +712,27 @@ function animateCardToTile(handIndex, tileIndex) {
   window.setTimeout(() => ghost.remove(), 300);
 }
 
+function animateDraggedCardToTile(ghost, tileIndex) {
+  const target = boardEl.querySelector(`[data-tile-index="${tileIndex}"]`);
+  if (!ghost || !target) {
+    ghost?.remove();
+    return;
+  }
+
+  const targetRect = target.getBoundingClientRect();
+  ghost.classList.add("place-ghost");
+  ghost.style.transition = "";
+  window.requestAnimationFrame(() => {
+    ghost.style.left = `${targetRect.left + targetRect.width / 2}px`;
+    ghost.style.top = `${targetRect.top + targetRect.height / 2}px`;
+    ghost.style.transform = "translate(-50%, -50%) rotate(0deg) scale(.74)";
+    ghost.style.opacity = ".35";
+  });
+  window.setTimeout(() => ghost.remove(), 320);
+}
+
 function clearCardDrag() {
+  sendCardDragPreview(null, false);
   draggedCard?.ghost?.remove();
   draggedCard?.card?.classList.remove("drag-source");
   draggedCard = null;
@@ -722,14 +782,19 @@ function startCardDrag(candidate, event) {
   gameShell.classList.add("dragging-card");
 
   draggedCard = { ...candidate, ghost };
-  updateBoardDragTargets(candidate.value, getTileIndexAtPoint(event.clientX, event.clientY));
+  const hoverIndex = getTileIndexAtPoint(event.clientX, event.clientY);
+  updateBoardDragTargets(candidate.value, hoverIndex);
+  sendCardDragPreview(hoverIndex, true);
   updateDragGhostPosition(event.clientX, event.clientY);
 }
 
 function finishCardDrag(event) {
   if (!draggedCard) return;
-  const { index, value } = draggedCard;
+  const { index, value, ghost } = draggedCard;
   const tileIndex = getTileIndexAtPoint(event.clientX, event.clientY);
+  if (tileIndex !== null && canPlaceCard(tileIndex, value)) {
+    draggedCard.ghost = null;
+  }
   clearCardDrag();
 
   if (tileIndex === null) {
@@ -755,7 +820,7 @@ function finishCardDrag(event) {
 
   selectedCardIndex = index;
   selectedToken = null;
-  animateCardToTile(index, tileIndex);
+  animateDraggedCardToTile(ghost, tileIndex);
   sendAction({ type: "placeCard", handIndex: index, tileIndex });
 }
 
@@ -773,6 +838,7 @@ function updateCardDragFromPointer(event) {
   event.preventDefault();
   const hoverIndex = getTileIndexAtPoint(event.clientX, event.clientY);
   updateBoardDragTargets(dragCandidate.value, hoverIndex);
+  sendCardDragPreview(hoverIndex, true);
   updateDragGhostPosition(event.clientX, event.clientY);
 }
 
@@ -1052,6 +1118,8 @@ function render() {
     heldTokenId = null;
     selectedToken = null;
     selectedCardIndex = null;
+    remoteDragPreview = null;
+    lastSentCardDragTile = null;
     clearCardDrag();
     clearTokenDrag();
   }
@@ -1178,6 +1246,7 @@ function renderBoard() {
     if (game.lastPlacedTileIndex === index) tileEl.classList.add("last-placed");
     if (isSelectableTile(index)) tileEl.classList.add("selectable");
     if (isTargetableTile(index)) tileEl.classList.add("targetable");
+    if (remoteDragPreview?.tileIndex === index) tileEl.classList.add("remote-drag-hover");
 
     if (top) {
       const card = document.createElement("div");
@@ -1205,6 +1274,13 @@ function renderBoard() {
       });
       card.appendChild(strip);
       tileEl.appendChild(card);
+    }
+
+    if (remoteDragPreview?.tileIndex === index) {
+      const preview = document.createElement("div");
+      preview.className = `remote-card-preview p${(remoteDragPreview.seat ?? 0) + 1}-card`;
+      preview.innerHTML = `<span>JG</span>`;
+      tileEl.appendChild(preview);
     }
 
     tileEl.addEventListener("click", () => onTileClick(index));

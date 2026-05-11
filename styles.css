@@ -817,6 +817,47 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
     0 0 26px rgba(247, 217, 135, .44);
 }
 
+.tile.remote-drag-hover {
+  border-color: rgba(255, 240, 182, .86);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 240, 182, .62),
+    0 0 22px rgba(247, 217, 135, .32);
+}
+
+.remote-card-preview {
+  position: absolute;
+  z-index: 8;
+  width: 76%;
+  height: 86%;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(247, 217, 135, .88);
+  border-radius: 5px;
+  color: var(--gold);
+  background:
+    linear-gradient(135deg, transparent 42%, rgba(247, 217, 135, .18) 42% 58%, transparent 58%),
+    radial-gradient(circle at 50% 20%, rgba(247, 217, 135, .14), transparent 38%),
+    linear-gradient(160deg, #3a1e5d, #12101f);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 245, 207, .12),
+    0 7px 14px rgba(0, 0, 0, .44);
+  font-size: clamp(10px, 2.8vw, 14px);
+  font-weight: 900;
+  letter-spacing: .08em;
+  pointer-events: none;
+  animation: drag-tremble .46s ease-in-out infinite;
+}
+
+.remote-card-preview span {
+  width: 46%;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(247, 217, 135, .55);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .22);
+}
+
 .tile.targetable {
   border-color: var(--danger);
   box-shadow:

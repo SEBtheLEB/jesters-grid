@@ -373,6 +373,23 @@ function handleClientMessage(client, raw) {
     return;
   }
 
+  if (event === "dragPreview") {
+    const room = rooms.get(client.roomCode || String(payload?.code || "").trim().toUpperCase());
+    if (!room) return;
+    const stableClientId = cleanClientId(payload?.clientId || client.clientId);
+    const seat = client.seat ?? resolveSeat(room, stableClientId, payload?.seat);
+    if (seat !== 0 && seat !== 1) return;
+    client.clientId = stableClientId;
+    client.roomCode = room.code;
+    client.seat = seat;
+    emitDragPreview(room, client, {
+      seat,
+      active: !!payload?.active,
+      tileIndex: payload?.active ? numberInRange(payload?.tileIndex, 0, 15) : null
+    });
+    return;
+  }
+
   if (event === "leaveRoom") {
     const room = rooms.get(client.roomCode || String(payload?.code || "").trim().toUpperCase());
     if (room) {
@@ -547,6 +564,13 @@ function createRoomCode() {
 function emitRoom(room) {
   for (const client of clients.values()) {
     if (client.roomCode === room.code) sendState(client, room);
+  }
+}
+
+function emitDragPreview(room, sourceClient, preview) {
+  for (const client of clients.values()) {
+    if (client === sourceClient || client.roomCode !== room.code) continue;
+    send(client, { type: "dragPreview", preview });
   }
 }
 
