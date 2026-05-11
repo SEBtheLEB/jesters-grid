@@ -1575,8 +1575,8 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   -webkit-user-drag: none;
   cursor: grab;
   transition:
-    transform .36s cubic-bezier(.18, .88, .22, 1),
-    left .36s cubic-bezier(.18, .88, .22, 1),
+    transform .42s cubic-bezier(.18, .88, .22, 1),
+    left .42s cubic-bezier(.18, .88, .22, 1),
     box-shadow .22s ease,
     filter .22s ease,
     opacity .22s ease;

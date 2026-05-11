@@ -153,6 +153,7 @@ let previousPlayerTwoConnected = false;
 let previousShowingTokens = false;
 let introTimer = null;
 let botTurnTimer = null;
+let deckMotionTimer = null;
 
 const DECK_CARD_LAYOUTS = [
   { x: -46, y: -22, r: -8, openX: -90, openY: -42, openR: -9, z: 2 },
@@ -736,6 +737,48 @@ function clearHandFocus() {
   selectedToken = null;
 }
 
+function syncDeckExpansionClasses() {
+  handEl.classList.toggle("deck-expanded", deckExpanded);
+  handEl.classList.toggle("deck-holding", heldCardIndex !== null && !draggedCard);
+  handEl.closest(".hand-panel")?.classList.toggle("deck-expanded", deckExpanded);
+}
+
+function setLocalMessageInline(text) {
+  localMessage = text;
+  if (messageEl) messageEl.textContent = text;
+}
+
+function settleDeckMotion() {
+  window.clearTimeout(deckMotionTimer);
+  deckMotionTimer = window.setTimeout(() => {
+    deckMotionTimer = null;
+    if (snapshot && inspectedCardIndex === null && !draggedCard) render();
+  }, 460);
+}
+
+function openDeckAnimated(message = "Deck opened. Tap a card to select it, hold to inspect it, or drag it.") {
+  if (!isMyTurn()) {
+    setLocalMessage("Waiting for your turn.");
+    return false;
+  }
+  deckExpanded = true;
+  clearHandFocus();
+  syncDeckExpansionClasses();
+  setLocalMessageInline(message);
+  settleDeckMotion();
+  return true;
+}
+
+function tuckDeckAnimated() {
+  deckExpanded = false;
+  selectedCardIndex = null;
+  heldCardIndex = null;
+  syncDeckExpansionClasses();
+  handEl.querySelectorAll(".selected, .held-card").forEach((card) => card.classList.remove("selected", "held-card"));
+  renderBoard();
+  settleDeckMotion();
+}
+
 function tuckPlayPieces() {
   deckExpanded = false;
   showingTokens = false;
@@ -979,10 +1022,11 @@ function finishCardDrag(event) {
 function updateCardDragFromPointer(event) {
   if (!dragCandidate || dragCandidate.pointerId !== event.pointerId) return;
   if (inspectOverlay.classList.contains("show")) return;
-  window.clearTimeout(dragCandidate.holdTimer);
   const dx = event.clientX - dragCandidate.startX;
   const dy = event.clientY - dragCandidate.startY;
-  if (!dragCandidate.dragging && Math.hypot(dx, dy) > 10) {
+  const distance = Math.hypot(dx, dy);
+  if (!dragCandidate.dragging && distance > 10) {
+    window.clearTimeout(dragCandidate.holdTimer);
     dragCandidate.dragging = true;
     startCardDrag(dragCandidate, event);
   }
@@ -1039,6 +1083,11 @@ function bindCardDrag(card, index, value, isUnavailable) {
       if (!dragCandidate || dragCandidate.card !== card || dragCandidate.pointerId !== event.pointerId) return;
       card.dataset.suppressClick = "true";
       dragCandidate = null;
+      try {
+        card.releasePointerCapture(event.pointerId);
+      } catch {
+        // The browser may already have released capture after the hold.
+      }
       inspectCardFromElement(card, index, value);
     }, 330);
     try {
@@ -1157,10 +1206,11 @@ function finishTokenDrag(event) {
 function updateTokenDragFromPointer(event) {
   if (!tokenDragCandidate || tokenDragCandidate.pointerId !== event.pointerId) return;
   if (inspectOverlay.classList.contains("show")) return;
-  window.clearTimeout(tokenDragCandidate.holdTimer);
   const dx = event.clientX - tokenDragCandidate.startX;
   const dy = event.clientY - tokenDragCandidate.startY;
-  if (!tokenDragCandidate.dragging && Math.hypot(dx, dy) > 9) {
+  const distance = Math.hypot(dx, dy);
+  if (!tokenDragCandidate.dragging && distance > 9) {
+    window.clearTimeout(tokenDragCandidate.holdTimer);
     tokenDragCandidate.dragging = true;
     startTokenDrag(tokenDragCandidate, event);
   }
@@ -1215,6 +1265,11 @@ function bindTokenDrag(button, token, isUnavailable) {
       if (!tokenDragCandidate || tokenDragCandidate.button !== button || tokenDragCandidate.pointerId !== event.pointerId) return;
       button.dataset.suppressClick = "true";
       tokenDragCandidate = null;
+      try {
+        button.releasePointerCapture(event.pointerId);
+      } catch {
+        // The browser may already have released capture after the hold.
+      }
       inspectTokenFromElement(button, token);
     }, 330);
     try {
@@ -2360,18 +2415,7 @@ function renderHand() {
       event.stopPropagation();
       if (consumeHeldClick(card)) return;
       if (!deckExpanded) {
-        if (!isMyTurn()) {
-          setLocalMessage("Waiting for your turn.");
-          return;
-        }
-        deckExpanded = true;
-        inspectedCardIndex = null;
-        inspectedTokenId = null;
-        heldCardIndex = null;
-        heldTokenId = null;
-        selectedCardIndex = null;
-        selectedToken = null;
-        setLocalMessage("Deck opened. Tap a card to select it, hold to inspect it, or drag it.");
+        openDeckAnimated();
         return;
       }
       if (inspectedCardIndex === index) {
@@ -2603,11 +2647,10 @@ function onTileClick(index) {
     return;
   }
   if (deckExpanded || inspectedCardIndex !== null) {
-    deckExpanded = false;
     inspectedCardIndex = null;
     heldCardIndex = null;
     selectedCardIndex = null;
-    render();
+    tuckDeckAnimated();
     return;
   }
   sendAction({ type: "removeToken", tileIndex: index }, false);
@@ -2812,17 +2855,12 @@ window.addEventListener("pointercancel", (event) => endTokenDragFromPointer(even
 handEl.addEventListener("click", (event) => {
   if (event.target !== handEl) return;
   if (deckExpanded || showingTokens) return;
-  if (!isMyTurn()) {
-    setLocalMessage("Waiting for your turn.");
-    return;
-  }
-  deckExpanded = true;
-  clearHandFocus();
-  setLocalMessage("Deck opened. Tap a card to select it, hold to inspect it, or drag it.");
+  openDeckAnimated();
 });
 window.addEventListener("click", (event) => {
   const target = event.target;
   if (!(target instanceof Element)) return;
+  if (Date.now() < suppressPieceClickUntil) return;
   if (!deckExpanded && !showingTokens && inspectedCardIndex === null && inspectedTokenId === null && heldCardIndex === null && heldTokenId === null && selectedToken === null) return;
   if (target.closest(".settings-menu, .settings-button, .modal, .inspect-overlay, .waiting-room")) return;
   if (inspectedCardIndex !== null) {
@@ -2842,13 +2880,7 @@ window.addEventListener("click", (event) => {
   if (target.closest(".hand-stage")) return;
   if (target.closest(".tile") && (selectedCardIndex !== null || selectedToken !== null)) return;
   if (deckExpanded) {
-    deckExpanded = false;
-    selectedCardIndex = null;
-    heldCardIndex = null;
-    handEl.classList.remove("deck-expanded", "deck-holding");
-    handEl.closest(".hand-panel")?.classList.remove("deck-expanded");
-    handEl.querySelectorAll(".selected, .held-card").forEach((card) => card.classList.remove("selected", "held-card"));
-    renderBoard();
+    tuckDeckAnimated();
     return;
   }
   selectedToken = null;
