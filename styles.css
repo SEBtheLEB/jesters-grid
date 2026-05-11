@@ -493,11 +493,11 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   min-height: 0;
   display: grid;
   grid-template-rows:
-    minmax(132px, auto)
-    minmax(32px, 5vh)
+    clamp(124px, 17.5svh, 154px)
+    clamp(32px, 5svh, 44px)
     minmax(0, 1fr)
-    minmax(154px, 23vh)
-    minmax(34px, auto);
+    clamp(150px, 23svh, 208px)
+    clamp(34px, 5svh, 44px);
   gap: var(--gap);
 }
 
@@ -850,7 +850,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 }
 
 .board {
-  width: min(100%, 45.5svh, 410px);
+  width: min(100%, 42.5svh, 410px);
   max-width: 100%;
   max-height: 100%;
   aspect-ratio: 1;
@@ -1142,10 +1142,32 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 @keyframes token-orbit-in {
   0% {
     opacity: 0;
+    transform:
+      translate(
+        calc(-50% + var(--token-x, 0px)),
+        var(--token-y, 0px)
+      )
+      scale(.48);
     filter: brightness(1.25);
+  }
+  62% {
+    opacity: 1;
+    transform:
+      translate(
+        calc(-50% + var(--token-open-x, 0px)),
+        var(--token-open-y, 0px)
+      )
+      scale(1.12);
+    filter: brightness(1.18) drop-shadow(0 0 10px rgba(247, 217, 135, .36));
   }
   100% {
     opacity: 1;
+    transform:
+      translate(
+        calc(-50% + var(--token-open-x, 0px)),
+        var(--token-open-y, 0px)
+      )
+      scale(1);
     filter: brightness(1);
   }
 }
@@ -1394,7 +1416,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   z-index: 40;
   min-height: 0;
   display: grid;
-  grid-template-rows: 20px minmax(0, 1fr);
+  grid-template-rows: 24px minmax(0, 1fr);
   gap: 5px;
   overflow: visible;
   transition: transform .18s ease, opacity .18s ease, filter .18s ease;
@@ -1402,7 +1424,8 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 
 .section-label {
   position: relative;
-  z-index: 90;
+  z-index: 140;
+  min-height: 22px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1414,6 +1437,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   letter-spacing: .1em;
   text-transform: uppercase;
   white-space: nowrap;
+  pointer-events: none;
 }
 
 .section-label span:first-child {
@@ -1424,6 +1448,10 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+#turnLabel {
+  display: none;
 }
 
 .hand-panel.deck-expanded .section-label {
@@ -1448,6 +1476,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 }
 
 .hand {
+  --hand-offset: 0px;
   min-width: 0;
   min-height: 0;
   height: 100%;
@@ -1463,7 +1492,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 .hand::before {
   content: "";
   position: absolute;
-  left: 50%;
+  left: calc(50% + var(--hand-offset, 0px));
   bottom: 2px;
   width: min(82%, 310px);
   height: 30px;
@@ -1473,6 +1502,10 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   opacity: .82;
   pointer-events: none;
   transition: width .2s ease, opacity .2s ease;
+}
+
+.hand-panel.tokens-expanded .hand {
+  --hand-offset: clamp(-54px, -12vw, -34px);
 }
 
 .hand.deck-expanded::before {
@@ -1507,7 +1540,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   --deck-scale: .84;
   --card-lift: 0px;
   position: absolute;
-  left: 50%;
+  left: calc(50% + var(--hand-offset, 0px));
   top: 51%;
   z-index: var(--deck-z, 1);
   width: clamp(84px, 24vw, 104px);
@@ -1541,7 +1574,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   user-select: none;
   -webkit-user-drag: none;
   cursor: grab;
-  transition: transform .22s cubic-bezier(.2, .9, .24, 1), box-shadow .18s ease, filter .18s ease, opacity .18s ease;
+  transition: transform .26s cubic-bezier(.2, .9, .24, 1), left .26s cubic-bezier(.2, .9, .24, 1), box-shadow .18s ease, filter .18s ease, opacity .18s ease;
   touch-action: none;
   will-change: transform;
 }
@@ -1580,7 +1613,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 }
 
 .hand-card.place-ghost {
-  transition: left .28s cubic-bezier(.2, .85, .22, 1), top .28s cubic-bezier(.2, .85, .22, 1), transform .28s ease, opacity .22s ease;
+  transition: left .28s cubic-bezier(.2, .85, .22, 1), top .28s cubic-bezier(.2, .85, .22, 1), transform .28s ease, opacity .18s ease;
 }
 
 .hand-card::before {
@@ -1646,6 +1679,11 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
     inset 0 0 0 2px var(--gold),
     0 0 24px rgba(247, 217, 135, .5),
     0 24px 42px rgba(0, 0, 0, .66);
+}
+
+.hand-card.inspected.returning {
+  pointer-events: none;
+  animation: card-inspect-rise .22s cubic-bezier(.32, .04, .28, 1) reverse both;
 }
 
 .hand-card.is-disabled,
@@ -1898,6 +1936,11 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
     scale(var(--token-scale));
 }
 
+.tokens.token-expanded .token-button.token-enter .token-icon {
+  animation: token-count-pop .42s ease both;
+  animation-delay: calc(var(--draw-order, 0) * 35ms + 120ms);
+}
+
 .tokens.token-dragging .token-button,
 .tokens.token-holding .token-button {
   --token-scale: .82;
@@ -2062,7 +2105,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 }
 
 .token-button.place-ghost {
-  transition: left .28s cubic-bezier(.2, .85, .22, 1), top .28s cubic-bezier(.2, .85, .22, 1), transform .28s ease, opacity .22s ease;
+  transition: left .28s cubic-bezier(.2, .85, .22, 1), top .28s cubic-bezier(.2, .85, .22, 1), transform .28s ease, opacity .18s ease;
 }
 
 .token-button.token-enter {
@@ -2548,11 +2591,11 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 
   .game-shell {
     grid-template-rows:
-      minmax(128px, auto)
-      minmax(31px, 5vh)
+      clamp(120px, 17svh, 144px)
+      clamp(31px, 5svh, 40px)
       minmax(0, 1fr)
-      minmax(148px, 22.5vh)
-      minmax(32px, auto);
+      clamp(144px, 22.5svh, 190px)
+      clamp(32px, 5svh, 40px);
     gap: 5px;
   }
 
@@ -2609,7 +2652,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   }
 
   .board {
-    width: min(100%, 44.5svh, 390px);
+    width: min(100%, 41.5svh, 390px);
   }
 
   .hand-card {
@@ -2621,11 +2664,11 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 @media (max-height: 790px) {
   .game-shell {
     grid-template-rows:
-      minmax(122px, auto)
-      minmax(30px, 4.8vh)
+      clamp(112px, 17svh, 128px)
+      clamp(30px, 4.8svh, 38px)
       minmax(0, 1fr)
-      minmax(138px, 21vh)
-      minmax(31px, auto);
+      clamp(134px, 21svh, 166px)
+      clamp(31px, 4.8svh, 38px);
     gap: 5px;
   }
 
@@ -2648,7 +2691,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   }
 
   .board {
-    width: min(100%, 43.5svh, 380px);
+    width: min(100%, 40svh, 380px);
   }
 
   .token-toggle {
