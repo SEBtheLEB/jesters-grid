@@ -28,6 +28,8 @@ const TOKEN_TYPES = [
   { id: "parry", count: 1 }
 ];
 const VISUAL_RANKS = ["Jester Initiate", "Masked Challenger"];
+const BOT_NAME = "Clockwork Jester";
+const BOT_RANK = "Gilded Automaton";
 const WIN_LINES = [
   [0, 1, 2, 3],
   [4, 5, 6, 7],
@@ -50,7 +52,7 @@ server.on("upgrade", handleUpgrade);
 setInterval(() => {
   const now = Date.now();
   for (const [code, room] of rooms) {
-    const empty = room.players.every((player) => !player.connected);
+    const empty = room.players.every((player, index) => !player.connected || index === room.botSeat);
     if (empty && now - room.createdAt > 1000 * 60 * 60 * 6) rooms.delete(code);
   }
 }, 1000 * 60 * 15).unref();
@@ -97,6 +99,7 @@ async function handleApiRequest(req, res, url) {
         return;
       }
       const seat = resolveSeat(room, url.searchParams.get("clientId"), url.searchParams.get("seat"));
+      advanceBotIfNeeded(room);
       sendJsonResponse(res, { ok: true, snapshot: snapshotFor(room, seat) });
       return;
     }
@@ -111,6 +114,15 @@ async function handleApiRequest(req, res, url) {
       const code = createRoomCode();
       const clientId = cleanClientId(body.clientId);
       const room = createRoomState(code, cleanName(body.name, "Player 1"), clientId);
+      rooms.set(code, room);
+      sendJsonResponse(res, { ok: true, code, seat: 0, snapshot: snapshotFor(room, 0) });
+      return;
+    }
+
+    if (url.pathname === "/api/create-bot-room") {
+      const code = createRoomCode();
+      const clientId = cleanClientId(body.clientId);
+      const room = createBotRoomState(code, cleanName(body.name, "Player 1"), clientId);
       rooms.set(code, room);
       sendJsonResponse(res, { ok: true, code, seat: 0, snapshot: snapshotFor(room, 0) });
       return;
@@ -154,7 +166,10 @@ async function handleApiRequest(req, res, url) {
       }
       const seat = resolveSeat(room, body.clientId, body.seat);
       const result = performAction(room, seat, body.action || {});
-      if (result.ok) emitRoom(room);
+      if (result.ok) {
+        advanceBotIfNeeded(room);
+        emitRoom(room);
+      }
       sendJsonResponse(res, { ...result, snapshot: snapshotFor(room, seat) });
       return;
     }
@@ -332,6 +347,19 @@ function handleClientMessage(client, raw) {
     return;
   }
 
+  if (event === "createBotRoom") {
+    const code = createRoomCode();
+    const stableClientId = cleanClientId(payload?.clientId);
+    const room = createBotRoomState(code, cleanName(payload?.name, "Player 1"), stableClientId);
+    rooms.set(code, room);
+    client.clientId = stableClientId;
+    client.roomCode = code;
+    client.seat = 0;
+    reply(client, id, { ok: true, code, seat: 0 });
+    emitRoom(room);
+    return;
+  }
+
   if (event === "joinRoom") {
     const room = rooms.get(String(payload?.code || "").trim().toUpperCase());
     if (!room) {
@@ -369,7 +397,10 @@ function handleClientMessage(client, raw) {
     }
     const result = performAction(room, seat, payload?.action || payload || {});
     reply(client, id, result);
-    if (result.ok) emitRoom(room);
+    if (result.ok) {
+      advanceBotIfNeeded(room);
+      emitRoom(room);
+    }
     return;
   }
 
@@ -474,13 +505,15 @@ function handleClientDisconnect(client) {
   }
 }
 
-function makeSeat(id, name, clientId) {
-  return { id, name, clientId, connected: !!clientId };
+function makeSeat(id, name, clientId, rank) {
+  return { id, name, clientId, connected: !!clientId, rank: rank || VISUAL_RANKS[id - 1] || "Court Duelist" };
 }
 
 function createRoomState(code, playerName, clientId) {
   return {
     code,
+    mode: "room",
+    botSeat: null,
     phase: "waiting",
     ready: [false, false],
     createdAt: Date.now(),
@@ -492,6 +525,21 @@ function createRoomState(code, playerName, clientId) {
     ],
     game: newGame(false)
   };
+}
+
+function createBotRoomState(code, playerName, clientId) {
+  const room = createRoomState(code, playerName, clientId);
+  room.mode = "quickplay";
+  room.botSeat = 1;
+  room.phase = "playing";
+  room.ready = [true, true];
+  room.joinedAt = Date.now();
+  room.startedAt = Date.now();
+  room.players[1] = makeSeat(2, BOT_NAME, `bot-${code}`, BOT_RANK);
+  room.players[1].bot = true;
+  room.game = newGame(true);
+  setMessage(room.game, "Quickplay begins. Player 1 starts.");
+  return room;
 }
 
 function cleanClientId(value) {
@@ -539,6 +587,7 @@ function resolveSeat(room, clientId, requestedSeat) {
 
 function releaseSeat(room, seatIndex) {
   if (seatIndex !== 0 && seatIndex !== 1) return;
+  if (seatIndex === room.botSeat) return;
   const player = room.players[seatIndex];
   player.connected = false;
   player.clientId = null;
@@ -547,8 +596,9 @@ function releaseSeat(room, seatIndex) {
 }
 
 function deleteRoomIfEmpty(room) {
-  if (!room.players.every((player) => !player.connected)) return;
-  if (room.phase === "playing") return;
+  const noHumansConnected = room.players.every((player, index) => !player.connected || index === room.botSeat);
+  if (!noHumansConnected) return;
+  if (room.phase === "playing" && room.mode !== "quickplay") return;
   rooms.delete(room.code);
 }
 
@@ -578,6 +628,7 @@ function snapshotFor(room, seat) {
   return {
     room: {
       code: room.code,
+      mode: room.mode || "room",
       phase: room.phase,
       ready: room.ready,
       joinedAt: room.joinedAt,
@@ -591,7 +642,7 @@ function snapshotFor(room, seat) {
         name: room.players[index]?.name || `Player ${index + 1}`,
         connected: room.players[index]?.connected || false,
         ready: room.ready[index] || false,
-        rank: VISUAL_RANKS[index] || "Court Duelist",
+        rank: room.players[index]?.rank || VISUAL_RANKS[index] || "Court Duelist",
         hand: seat === index ? player.hand : null,
         handCount: player.hand.length,
         deckCount: player.deck.length,
@@ -690,6 +741,16 @@ function performAction(room, seat, action) {
   const game = room.game;
   if (action.type === "restart") {
     if (seat !== 0 && seat !== 1) return fail("Only seated players can restart.");
+    if (room.mode === "quickplay") {
+      room.phase = "playing";
+      room.ready = [true, true];
+      room.joinedAt = Date.now();
+      room.startedAt = Date.now();
+      room.players[room.botSeat].connected = true;
+      room.game = newGame(true);
+      setMessage(room.game, "Quickplay restarted. Player 1 starts.");
+      return ok();
+    }
     room.phase = "waiting";
     room.ready = [false, false];
     room.startedAt = null;
@@ -700,6 +761,7 @@ function performAction(room, seat, action) {
 
   if (seat !== 0 && seat !== 1) return fail("Spectators cannot move.");
   if (action.type === "ready") {
+    if (room.mode === "quickplay") return ok("Quickplay is already underway.");
     if (!room.players.every((player) => player.connected)) return fail("Wait for both duelists to connect.");
     if (room.phase === "playing") return ok("Match already started.");
     room.ready[seat] = true;
@@ -1130,4 +1192,369 @@ function cancelSelection(game) {
   }
   setMessage(game, "Selection cancelled.");
   return ok();
+}
+
+function advanceBotIfNeeded(room) {
+  if (!room || room.mode !== "quickplay") return;
+  let guard = 0;
+  while (isBotTurn(room) && guard < 3) {
+    runBotTurn(room);
+    guard += 1;
+  }
+}
+
+function isBotTurn(room) {
+  return room.mode === "quickplay" &&
+    room.phase === "playing" &&
+    room.botSeat === room.game.current &&
+    !room.game.gameOver;
+}
+
+function runBotTurn(room) {
+  const game = room.game;
+  let guard = 0;
+  setMessage(game, `${BOT_NAME} is plotting its move.`);
+
+  while (isBotTurn(room) && guard < 16) {
+    guard += 1;
+
+    if (resolveBotPending(game)) continue;
+    if (game.gameOver) return;
+
+    if (!game.cardPlacedThisTurn || game.extraCardPlacement) {
+      const move = chooseBotCardMove(game);
+      if (!move) {
+        forceBotTurnEnd(game);
+        return;
+      }
+      placeCard(game, move.handIndex, move.tileIndex);
+      continue;
+    }
+
+    if (maybeBotUseSupportToken(game)) continue;
+    if (resolveBotPending(game)) continue;
+    if (game.gameOver) return;
+
+    const result = endTurn(game);
+    if (result.ok) setMessage(game, `Your turn. ${BOT_NAME} has moved.`);
+    return;
+  }
+
+  if (isBotTurn(room)) forceBotTurnEnd(game);
+}
+
+function forceBotTurnEnd(game) {
+  game.pendingShot = null;
+  game.pendingWitchTile = null;
+  game.tokensUsed = 0;
+  game.placedTokensThisTurn = [];
+  game.cardPlacedThisTurn = false;
+  game.extraCardPlacement = false;
+  decrementStunsForCurrentPlayer(game);
+  game.current = 1 - game.current;
+  drawUpToSix(currentPlayer(game));
+  setMessage(game, `${BOT_NAME} found no legal card. Your turn.`);
+}
+
+function resolveBotPending(game) {
+  if (game.pendingShot) {
+    let target = chooseBotShotTarget(game);
+    if (target === null) {
+      const pierced = applyArmorPierceToPendingShot(game);
+      if (pierced.ok) target = chooseBotShotTarget(game);
+    }
+    if (target !== null) resolveShot(game, target);
+    else cancelSelection(game);
+    return true;
+  }
+
+  if (game.pendingWitchTile !== null) {
+    const target = chooseBotWitchTarget(game);
+    if (target !== null) resolveWitchStun(game, target);
+    else cancelSelection(game);
+    return true;
+  }
+
+  return false;
+}
+
+function chooseBotShotTarget(game) {
+  const targets = game.pendingShot?.targets || [];
+  if (targets.length === 0) return null;
+  let best = null;
+  let bestScore = -Infinity;
+  targets.forEach((index) => {
+    const card = topCard(game.board[index]);
+    if (!card) return;
+    const score = card.value * 90 + tileLinePressure(game, index, card.owner) + (card.protected ? -160 : 0);
+    if (score > bestScore) {
+      bestScore = score;
+      best = index;
+    }
+  });
+  return best;
+}
+
+function chooseBotWitchTarget(game) {
+  const botId = currentPlayer(game).id;
+  const enemyId = botId === 1 ? 2 : 1;
+  let best = null;
+  let bestScore = -Infinity;
+
+  game.board.forEach((tile, index) => {
+    if (index === game.pendingWitchTile) return;
+    const card = topCard(tile);
+    if (!card || card.owner !== enemyId || card.stunned || tile.stunTurns > 0) return;
+    const score = card.value * 85 + tileLinePressure(game, index, enemyId);
+    if (score > bestScore) {
+      bestScore = score;
+      best = index;
+    }
+  });
+
+  return best;
+}
+
+function chooseBotCardMove(game) {
+  const player = currentPlayer(game);
+  const blockThreats = getThreatTilesForOwner(game, player.id === 1 ? 2 : 1);
+  let best = null;
+  let bestScore = -Infinity;
+
+  player.hand.forEach((value, handIndex) => {
+    game.board.forEach((_tile, tileIndex) => {
+      if (!canPlaceCard(game, tileIndex, value)) return;
+      const score = scoreBotCardMove(game, handIndex, tileIndex, blockThreats) + Math.random() * 6;
+      if (score > bestScore) {
+        bestScore = score;
+        best = { handIndex, tileIndex, score };
+      }
+    });
+  });
+
+  return best;
+}
+
+function scoreBotCardMove(game, handIndex, tileIndex, blockThreats) {
+  const player = currentPlayer(game);
+  const enemyId = player.id === 1 ? 2 : 1;
+  const value = player.hand[handIndex];
+  const tile = game.board[tileIndex];
+  const top = topCard(tile);
+  const sweep = !!top && top.value === value;
+  let score = value * 8;
+
+  if (sweep) {
+    score += top.owner === enemyId ? 380 + top.value * 42 : -620;
+    if (blockThreats.has(tileIndex)) score += 700;
+    return score;
+  }
+
+  if (wouldWinAfterMove(game, tileIndex, player.id)) score += 20000;
+  if (blockThreats.has(tileIndex)) score += 6500;
+
+  if (top?.owner === enemyId) {
+    score += 240 + top.value * 40;
+    if (top.value >= 10) score += 360;
+  } else if (!top) {
+    score += 70;
+  }
+
+  if ([5, 6, 9, 10].includes(tileIndex)) score += 95;
+  if ([0, 3, 12, 15].includes(tileIndex)) score += 36;
+  if (value === 14) score += 460;
+  if (value === 3) score += 230;
+  if (value === 6) score += 180 + bestEnemyTileValue(game) * 12;
+  if (value === 4 || value === 5) score += 120 + botShooterPotential(game, tileIndex, value, player.id);
+
+  WIN_LINES.forEach((line) => {
+    if (!line.includes(tileIndex)) return;
+    let own = 0;
+    let enemy = 0;
+    let empty = 0;
+    line.forEach((index) => {
+      const owner = ownerAfterBotMove(game, index, tileIndex, player.id, false);
+      if (owner === player.id) own += 1;
+      else if (owner === enemyId) enemy += 1;
+      else empty += 1;
+    });
+    if (own === 4) score += 20000;
+    if (own === 3 && empty === 1) score += 1250;
+    if (own === 2 && empty >= 1) score += 320;
+    if (enemy === 3 && empty === 1) score += 520;
+    score += own * own * 140;
+    score -= enemy * enemy * 48;
+  });
+
+  return score;
+}
+
+function ownerAfterBotMove(game, index, tileIndex, ownerId, sweep) {
+  if (index === tileIndex) return sweep ? 0 : ownerId;
+  return topCard(game.board[index])?.owner || 0;
+}
+
+function wouldWinAfterMove(game, tileIndex, ownerId) {
+  return WIN_LINES.some((line) => (
+    line.includes(tileIndex) &&
+    line.every((index) => ownerAfterBotMove(game, index, tileIndex, ownerId, false) === ownerId)
+  ));
+}
+
+function getThreatTilesForOwner(game, ownerId) {
+  const threats = new Set();
+  WIN_LINES.forEach((line) => {
+    let owned = 0;
+    line.forEach((index) => {
+      if (topCard(game.board[index])?.owner === ownerId) owned += 1;
+    });
+    if (owned !== 3) return;
+    line.forEach((index) => {
+      if (topCard(game.board[index])?.owner !== ownerId) threats.add(index);
+    });
+  });
+  return threats;
+}
+
+function tileLinePressure(game, tileIndex, ownerId) {
+  let score = 0;
+  WIN_LINES.forEach((line) => {
+    if (!line.includes(tileIndex)) return;
+    const owned = line.filter((index) => topCard(game.board[index])?.owner === ownerId).length;
+    if (owned === 3) score += 520;
+    else if (owned === 2) score += 170;
+  });
+  return score;
+}
+
+function bestEnemyTileValue(game) {
+  const botId = currentPlayer(game).id;
+  return game.board.reduce((best, tile) => {
+    const card = topCard(tile);
+    return card && card.owner !== botId ? Math.max(best, card.value) : best;
+  }, 0);
+}
+
+function botShooterPotential(game, tileIndex, value, ownerId, pierce = false) {
+  if (value !== 4 && value !== 5) return 0;
+  const dirs = value === 4 ? [[-1, -1], [-1, 1], [1, -1], [1, 1]] : [[-1, 0], [1, 0], [0, -1], [0, 1]];
+  const startRow = Math.floor(tileIndex / 4);
+  const startCol = tileIndex % 4;
+  let score = 0;
+
+  dirs.forEach(([rowDelta, colDelta]) => {
+    let row = startRow + rowDelta;
+    let col = startCol + colDelta;
+    while (row >= 0 && row < 4 && col >= 0 && col < 4) {
+      const index = row * 4 + col;
+      const card = topCard(game.board[index]);
+      if (card) {
+        if (card.owner !== ownerId && canShootCard(card, { owner: ownerId, pierce })) {
+          score += 180 + card.value * 45 + tileLinePressure(game, index, card.owner);
+        } else if (card.owner !== ownerId && !pierce && card.value >= 10 && currentPlayer(game).tokens.pierce > 0) {
+          score += 95 + card.value * 15;
+        }
+        break;
+      }
+      row += rowDelta;
+      col += colDelta;
+    }
+  });
+
+  return score;
+}
+
+function maybeBotUseSupportToken(game) {
+  const player = currentPlayer(game);
+  if (game.tokensUsed >= 2) return false;
+
+  if (player.tokens.potion > 0) {
+    const potionTile = chooseBotPotionTile(game);
+    if (potionTile !== null && useTokenOnTile(game, "potion", potionTile).ok) return true;
+  }
+
+  if (player.tokens.ammo > 0) {
+    const ammoTile = chooseBotAmmoTile(game);
+    if (ammoTile !== null && useTokenOnTile(game, "ammo", ammoTile).ok) return true;
+  }
+
+  if (player.tokens.bard > 0) {
+    const bardTile = chooseBotBardTile(game);
+    if (bardTile !== null && useTokenOnTile(game, "bard", bardTile).ok) return true;
+  }
+
+  if (player.tokens.parry > 0 && game.tokensUsed < 2) {
+    const parryTile = chooseBotParryTile(game);
+    if (parryTile !== null && useTokenOnTile(game, "parry", parryTile).ok) return true;
+  }
+
+  return false;
+}
+
+function chooseBotPotionTile(game) {
+  const playerId = currentPlayer(game).id;
+  let best = null;
+  let bestScore = -Infinity;
+  game.board.forEach((tile, index) => {
+    const card = topCard(tile);
+    if (!card || card.owner !== playerId || (tile.stunTurns <= 0 && !card.stunned)) return;
+    const score = card.value * 70 + tileLinePressure(game, index, playerId);
+    if (score > bestScore) {
+      bestScore = score;
+      best = index;
+    }
+  });
+  return best;
+}
+
+function chooseBotAmmoTile(game) {
+  const playerId = currentPlayer(game).id;
+  let best = null;
+  let bestScore = 0;
+  game.board.forEach((tile, index) => {
+    const card = topCard(tile);
+    if (!card || card.owner !== playerId || !isShooter(card, tile)) return;
+    if (tile.tokens.some((token) => token.owner === playerId && token.type === "ammo")) return;
+    const score = botShooterPotential(game, index, effectiveValue(card, tile), playerId, card.pierce);
+    if (score > bestScore) {
+      bestScore = score;
+      best = index;
+    }
+  });
+  return best;
+}
+
+function chooseBotBardTile(game) {
+  const playerId = currentPlayer(game).id;
+  let best = null;
+  let bestScore = 0;
+  game.board.forEach((tile, index) => {
+    const card = topCard(tile);
+    if (!card || card.owner !== playerId || ![1, 2].includes(card.value)) return;
+    if (tile.tokens.some((token) => token.owner === playerId && token.type === "bard")) return;
+    const shooterValue = card.value === 1 ? 4 : 5;
+    const score = botShooterPotential(game, index, shooterValue, playerId);
+    if (score > bestScore) {
+      bestScore = score;
+      best = index;
+    }
+  });
+  return best;
+}
+
+function chooseBotParryTile(game) {
+  const playerId = currentPlayer(game).id;
+  let best = null;
+  let bestScore = 0;
+  game.board.forEach((tile, index) => {
+    const card = topCard(tile);
+    if (!card || card.owner !== playerId || card.protected) return;
+    if (tile.tokens.some((token) => token.owner === playerId && token.type === "parry")) return;
+    const score = card.value * 34 + tileLinePressure(game, index, playerId);
+    if (score > bestScore && (card.value >= 10 || score >= 520)) {
+      bestScore = score;
+      best = index;
+    }
+  });
+  return best;
 }

@@ -94,6 +94,11 @@ const tokenPanelBtn = document.getElementById("tokenPanelBtn");
 const playerNameInput = document.getElementById("playerName");
 const roomCodeInput = document.getElementById("roomCodeInput");
 const menuStatus = document.getElementById("menuStatus");
+const roomTabBtn = document.getElementById("roomTabBtn");
+const quickplayTabBtn = document.getElementById("quickplayTabBtn");
+const roomTabPanel = document.getElementById("roomTabPanel");
+const quickplayTabPanel = document.getElementById("quickplayTabPanel");
+const quickplayBotBtn = document.getElementById("quickplayBotBtn");
 
 let snapshot = null;
 let selectedCardIndex = null;
@@ -167,6 +172,17 @@ function showScreen(name) {
 
 function setMenuStatus(text) {
   menuStatus.textContent = text;
+}
+
+function showMenuTab(tab) {
+  const quickplay = tab === "quickplay";
+  roomTabBtn.classList.toggle("active", !quickplay);
+  quickplayTabBtn.classList.toggle("active", quickplay);
+  roomTabBtn.setAttribute("aria-selected", String(!quickplay));
+  quickplayTabBtn.setAttribute("aria-selected", String(quickplay));
+  roomTabPanel.classList.toggle("active", !quickplay);
+  quickplayTabPanel.classList.toggle("active", quickplay);
+  setMenuStatus(quickplay ? "Quickplay starts a solo bot duel." : "Connect to start a 1v1 room.");
 }
 
 function setLocalMessage(text) {
@@ -354,6 +370,7 @@ async function pollState() {
 async function sendHttpEvent(event, payload, callback) {
   const routes = {
     createRoom: "/api/create-room",
+    createBotRoom: "/api/create-bot-room",
     joinRoom: "/api/join-room",
     leaveRoom: "/api/leave-room",
     gameAction: "/api/action"
@@ -1198,14 +1215,15 @@ function renderStatus() {
   const bottom = players[bottomIndex];
   const current = players[game.current];
 
-  document.getElementById("roomCodeDisplay").textContent = `Room ${snapshot.room.code}`;
+  document.getElementById("roomCodeDisplay").textContent = snapshot.room.mode === "quickplay" ? "Quickplay" : `Room ${snapshot.room.code}`;
   document.getElementById("seatLabel").textContent = seat === null ? "Spectator" : `Player ${seat + 1}`;
   document.getElementById("onlineStatus").textContent = socketOpen() || usingHttpFallback ? "Online" : "Offline";
   document.getElementById("opponentName").textContent = top.name || `Player ${topIndex + 1}`;
-  document.getElementById("opponentTitle").textContent = top.connected ? `Player ${topIndex + 1}` : "Disconnected";
+  document.getElementById("opponentTitle").textContent = top.connected ? (top.rank || `Player ${topIndex + 1}`) : "Disconnected";
   document.getElementById("opponentInfo").textContent = `C ${top.handCount} - T ${top.tokenTotal}`;
   document.getElementById("opponentDeck").textContent = `Deck ${top.deckCount}`;
   document.getElementById("playerNameLabel").textContent = bottom.name || `Player ${bottomIndex + 1}`;
+  document.getElementById("playerTitle").textContent = bottom.rank || `Player ${bottomIndex + 1}`;
   document.getElementById("playerInfo").textContent = `C ${bottom.handCount} - T ${bottom.tokenTotal}`;
   document.getElementById("playerDeck").textContent = `Deck ${bottom.deckCount}`;
 
@@ -1623,6 +1641,20 @@ function createRoom() {
   });
 }
 
+function createBotRoom() {
+  const name = playerNameInput.value.trim() || "Jester";
+  localStorage.setItem("jg-name", name);
+  sendEvent("createBotRoom", { name }, (result) => {
+    if (!result?.ok) {
+      setMenuStatus(result?.message || "Could not start quickplay.");
+      return;
+    }
+    roomCodeInput.value = result.code || "";
+    window.history.replaceState(null, "", `?room=${result.code}`);
+    showScreen("game");
+  });
+}
+
 function joinRoom() {
   const name = playerNameInput.value.trim() || "Jester";
   const code = roomCodeInput.value.trim().toUpperCase();
@@ -1673,6 +1705,9 @@ connectRealtime();
 
 document.getElementById("createRoomBtn").addEventListener("click", createRoom);
 document.getElementById("joinRoomBtn").addEventListener("click", joinRoom);
+quickplayBotBtn.addEventListener("click", createBotRoom);
+roomTabBtn.addEventListener("click", () => showMenuTab("room"));
+quickplayTabBtn.addEventListener("click", () => showMenuTab("quickplay"));
 roomCodeInput.addEventListener("input", () => {
   roomCodeInput.value = roomCodeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
 });

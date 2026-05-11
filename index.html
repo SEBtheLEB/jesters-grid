@@ -8,34 +8,63 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/icon.svg" />
-  <link rel="stylesheet" href="/styles.css?v=10" />
+  <link rel="stylesheet" href="/styles.css?v=11" />
 </head>
 <body data-theme="dark">
   <main class="phone">
     <section id="menuScreen" class="screen active">
       <div class="menu-content">
-        <div class="logo">
-          <h1>Jester's<br>Grid</h1>
-          <span>Tactical Court Duel</span>
-        </div>
-        <div class="hero-card" aria-hidden="true">
-          <div class="hat"></div>
-          <div class="hero-face"></div>
-        </div>
-        <div class="lobby-panel fantasy-panel">
-          <label class="field-label" for="playerName">Duelist Name</label>
-          <input id="playerName" class="text-input" maxlength="18" autocomplete="nickname" value="Jester" />
-          <button class="big-button" id="createRoomBtn">Create Duel</button>
-          <div class="join-row">
-            <input id="roomCodeInput" class="text-input" maxlength="6" placeholder="CODE" autocomplete="off" />
-            <button class="small-button" id="joinRoomBtn">Join</button>
+        <div class="menu-body">
+          <div class="logo">
+            <h1>Jester's<br>Grid</h1>
+            <span>Tactical Court Duel</span>
           </div>
-          <p id="menuStatus" class="status-copy">Connect to start a 1v1 room.</p>
+          <div class="hero-card" aria-hidden="true">
+            <div class="hat"></div>
+            <div class="hero-face"></div>
+          </div>
+
+          <div class="name-panel fantasy-panel">
+            <label class="field-label" for="playerName">Duelist Name</label>
+            <input id="playerName" class="text-input" maxlength="18" autocomplete="nickname" value="Jester" />
+          </div>
+
+          <div id="roomTabPanel" class="menu-tab-panel active" role="tabpanel" aria-labelledby="roomTabBtn">
+            <div class="lobby-panel fantasy-panel">
+              <button class="big-button" id="createRoomBtn">Create Duel</button>
+              <div class="join-row">
+                <input id="roomCodeInput" class="text-input" maxlength="6" placeholder="CODE" autocomplete="off" />
+                <button class="small-button" id="joinRoomBtn">Join</button>
+              </div>
+              <p id="menuStatus" class="status-copy">Connect to start a 1v1 room.</p>
+            </div>
+          </div>
+
+          <div id="quickplayTabPanel" class="menu-tab-panel" role="tabpanel" aria-labelledby="quickplayTabBtn">
+            <div class="quickplay-panel fantasy-panel">
+              <div class="bot-card">
+                <div class="bot-avatar" aria-hidden="true">CJ</div>
+                <div class="bot-copy">
+                  <span>Quickplay Rival</span>
+                  <strong>Clockwork Jester</strong>
+                  <em>Gilded Automaton Rank</em>
+                </div>
+              </div>
+              <p class="quickplay-copy">Start a solo duel against a tactical court bot. No room code needed.</p>
+              <button class="big-button" id="quickplayBotBtn">Play Bot Duel</button>
+            </div>
+          </div>
+
+          <div class="menu-actions">
+            <button class="small-button" id="rulesBtn">Rules</button>
+            <button class="small-button red" id="resetBtn">New Match</button>
+          </div>
         </div>
-        <div class="menu-buttons">
-          <button class="small-button" id="rulesBtn">Rules</button>
-          <button class="small-button red" id="resetBtn">New Match</button>
-        </div>
+
+        <nav class="menu-tabs fantasy-panel" aria-label="Main menu">
+          <button id="roomTabBtn" class="menu-tab active" type="button" role="tab" aria-selected="true" aria-controls="roomTabPanel">Room Multiplayer</button>
+          <button id="quickplayTabBtn" class="menu-tab" type="button" role="tab" aria-selected="false" aria-controls="quickplayTabPanel">Quickplay</button>
+        </nav>
       </div>
     </section>
 
@@ -216,6 +245,6 @@
     </div>
   </main>
 
-  <script src="/client.js?v=10"></script>
+  <script src="/client.js?v=11"></script>
 </body>
 </html>
