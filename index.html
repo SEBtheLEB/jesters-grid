@@ -78,6 +78,7 @@
           <div id="waitingJoinBanner" class="join-banner">Player 2 has joined the court.</div>
           <p id="waitingStatus" class="waiting-status">Share the room code with your opponent.</p>
           <button id="readyBtn" class="big-button ready-button">Ready</button>
+          <button id="waitingBackBtn" class="small-button waiting-back-button">Back to Menu</button>
         </div>
       </section>
 
@@ -148,14 +149,16 @@
           <div class="hand-stage">
             <div class="hand-scroll">
               <div id="hand" class="hand"></div>
-              <div id="tokens" class="tokens hidden"></div>
-              <div id="emptyTokenLabel" class="token-view-label">No tokens available</div>
             </div>
-            <button id="tokenPanelBtn" class="token-toggle" aria-label="Open token pouch" aria-pressed="false">
-              <span class="pouch-ornament" aria-hidden="true"></span>
-              <span class="pouch-title">Tokens</span>
-              <span id="tokenLimit" class="pouch-count">0/2</span>
-            </button>
+            <div class="token-dock">
+              <div id="tokens" class="tokens"></div>
+              <div id="emptyTokenLabel" class="token-view-label">No tokens</div>
+              <button id="tokenPanelBtn" class="token-toggle" aria-label="Untuck tokens" aria-pressed="false">
+                <span class="pouch-ornament" aria-hidden="true"></span>
+                <span class="pouch-title">Tokens</span>
+                <span id="tokenLimit" class="pouch-count">0/2</span>
+              </button>
+            </div>
           </div>
         </section>
 

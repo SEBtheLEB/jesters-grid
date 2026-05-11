@@ -123,8 +123,26 @@ async function handleApiRequest(req, res, url) {
         return;
       }
       const seat = claimSeat(room, cleanClientId(body.clientId), body.name);
+      if (seat === null) {
+        sendJsonResponse(res, fail("Room is full."));
+        return;
+      }
       emitRoom(room);
       sendJsonResponse(res, { ok: true, code: room.code, seat, snapshot: snapshotFor(room, seat) });
+      return;
+    }
+
+    if (url.pathname === "/api/leave-room") {
+      const room = rooms.get(String(body.code || "").trim().toUpperCase());
+      if (!room) {
+        sendJsonResponse(res, ok());
+        return;
+      }
+      const seat = resolveSeat(room, body.clientId, body.seat);
+      releaseSeat(room, seat);
+      emitRoom(room);
+      deleteRoomIfEmpty(room);
+      sendJsonResponse(res, ok());
       return;
     }
 
@@ -225,6 +243,7 @@ function handleUpgrade(req, socket) {
 
   const client = {
     id: crypto.randomUUID(),
+    clientId: null,
     socket,
     roomCode: null,
     seat: null,
@@ -302,8 +321,10 @@ function handleClientMessage(client, raw) {
   const { id, event, payload } = message;
   if (event === "createRoom") {
     const code = createRoomCode();
-    const room = createRoomState(code, cleanName(payload?.name, "Player 1"), client.id);
+    const stableClientId = cleanClientId(payload?.clientId);
+    const room = createRoomState(code, cleanName(payload?.name, "Player 1"), stableClientId);
     rooms.set(code, room);
+    client.clientId = stableClientId;
     client.roomCode = code;
     client.seat = 0;
     reply(client, id, { ok: true, code, seat: 0 });
@@ -318,7 +339,13 @@ function handleClientMessage(client, raw) {
       return;
     }
 
-    const seat = claimSeat(room, client.id, payload?.name);
+    const stableClientId = cleanClientId(payload?.clientId);
+    const seat = claimSeat(room, stableClientId, payload?.name);
+    if (seat === null) {
+      reply(client, id, fail("Room is full."));
+      return;
+    }
+    client.clientId = stableClientId;
     client.roomCode = room.code;
     client.seat = seat;
     reply(client, id, { ok: true, code: room.code, seat });
@@ -327,15 +354,36 @@ function handleClientMessage(client, raw) {
   }
 
   if (event === "gameAction") {
-    const room = rooms.get(client.roomCode);
+    const room = rooms.get(client.roomCode || String(payload?.code || "").trim().toUpperCase());
     if (!room) {
       reply(client, id, fail("Join a room first."));
       return;
     }
 
-    const result = performAction(room, client.seat, payload || {});
+    const stableClientId = cleanClientId(payload?.clientId || client.clientId);
+    const seat = client.seat ?? resolveSeat(room, stableClientId, payload?.seat);
+    if (seat !== null) {
+      client.clientId = stableClientId;
+      client.roomCode = room.code;
+      client.seat = seat;
+    }
+    const result = performAction(room, seat, payload?.action || payload || {});
     reply(client, id, result);
     if (result.ok) emitRoom(room);
+    return;
+  }
+
+  if (event === "leaveRoom") {
+    const room = rooms.get(client.roomCode || String(payload?.code || "").trim().toUpperCase());
+    if (room) {
+      const seat = client.seat ?? resolveSeat(room, payload?.clientId || client.clientId, payload?.seat);
+      releaseSeat(room, seat);
+      emitRoom(room);
+      deleteRoomIfEmpty(room);
+    }
+    client.roomCode = null;
+    client.seat = null;
+    reply(client, id, ok());
     return;
   }
 
@@ -391,22 +439,29 @@ function handleClientDisconnect(client) {
 
   const room = rooms.get(client.roomCode);
   if (!room) return;
-  const player = room.players.find((seat) => seat.socketId === client.id);
+  const hasReplacement = Array.from(clients.values()).some((other) => (
+    !other.closed &&
+    other.roomCode === client.roomCode &&
+    other.clientId === client.clientId
+  ));
+  if (hasReplacement) return;
+
+  const player = room.players.find((seat) => seat.clientId === client.clientId);
   if (player) {
     const seatIndex = room.players.indexOf(player);
-    player.socketId = null;
     player.connected = false;
     if (seatIndex >= 0 && room.phase !== "playing") room.ready[seatIndex] = false;
     setMessage(room.game, `${player.name} disconnected.`);
     emitRoom(room);
+    deleteRoomIfEmpty(room);
   }
 }
 
-function makeSeat(id, name, socketId) {
-  return { id, name, socketId, connected: !!socketId };
+function makeSeat(id, name, clientId) {
+  return { id, name, clientId, connected: !!clientId };
 }
 
-function createRoomState(code, playerName, socketId) {
+function createRoomState(code, playerName, clientId) {
   return {
     code,
     phase: "waiting",
@@ -415,7 +470,7 @@ function createRoomState(code, playerName, socketId) {
     joinedAt: null,
     startedAt: null,
     players: [
-      makeSeat(1, playerName, socketId),
+      makeSeat(1, playerName, clientId),
       makeSeat(2, "Player 2", null)
     ],
     game: newGame(false)
@@ -432,17 +487,19 @@ function cleanName(value, fallback) {
   return cleaned || fallback;
 }
 
-function claimSeat(room, socketId, name) {
-  const existingIndex = room.players.findIndex((seat) => seat.socketId === socketId);
+function claimSeat(room, clientId, name) {
+  const existingIndex = room.players.findIndex((seat) => seat.clientId === clientId);
   if (existingIndex >= 0) {
+    const wasDisconnected = !room.players[existingIndex].connected;
     room.players[existingIndex].connected = true;
     room.players[existingIndex].name = cleanName(name, `Player ${existingIndex + 1}`);
+    if (wasDisconnected) setMessage(room.game, `${room.players[existingIndex].name} reconnected.`);
     return existingIndex;
   }
 
   const openIndex = room.players.findIndex((seat) => !seat.connected);
   if (openIndex >= 0) {
-    room.players[openIndex].socketId = socketId;
+    room.players[openIndex].clientId = clientId;
     room.players[openIndex].connected = true;
     room.players[openIndex].name = cleanName(name, `Player ${openIndex + 1}`);
     if (room.phase !== "playing") room.ready[openIndex] = false;
@@ -456,11 +513,26 @@ function claimSeat(room, socketId, name) {
 function resolveSeat(room, clientId, requestedSeat) {
   const cleanId = cleanClientId(clientId);
   const seat = Number(requestedSeat);
-  if (Number.isInteger(seat) && seat >= 0 && seat <= 1 && room.players[seat]?.socketId === cleanId) {
+  if (Number.isInteger(seat) && seat >= 0 && seat <= 1 && room.players[seat]?.clientId === cleanId) {
     return seat;
   }
-  const found = room.players.findIndex((player) => player.socketId === cleanId);
+  const found = room.players.findIndex((player) => player.clientId === cleanId);
   return found >= 0 ? found : null;
+}
+
+function releaseSeat(room, seatIndex) {
+  if (seatIndex !== 0 && seatIndex !== 1) return;
+  const player = room.players[seatIndex];
+  player.connected = false;
+  player.clientId = null;
+  room.ready[seatIndex] = false;
+  if (room.phase !== "playing") setMessage(room.game, `${player.name} left the waiting room.`);
+}
+
+function deleteRoomIfEmpty(room) {
+  if (!room.players.every((player) => !player.connected)) return;
+  if (room.phase === "playing") return;
+  rooms.delete(room.code);
 }
 
 function createRoomCode() {

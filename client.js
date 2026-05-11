@@ -68,6 +68,7 @@ const waitingCopyInvite = document.getElementById("waitingCopyInvite");
 const waitingStatus = document.getElementById("waitingStatus");
 const waitingJoinBanner = document.getElementById("waitingJoinBanner");
 const readyBtn = document.getElementById("readyBtn");
+const waitingBackBtn = document.getElementById("waitingBackBtn");
 const turnIntroOverlay = document.getElementById("turnIntroOverlay");
 const turnIntroText = document.getElementById("turnIntroText");
 const turnIntroKicker = document.getElementById("turnIntroKicker");
@@ -99,6 +100,8 @@ let selectedCardIndex = null;
 let selectedToken = null;
 let showingTokens = false;
 let deckExpanded = false;
+let inspectedCardIndex = null;
+let heldCardIndex = null;
 let dragCandidate = null;
 let draggedCard = null;
 let localMessage = "";
@@ -119,6 +122,14 @@ const DECK_CARD_LAYOUTS = [
   { x: -42, y: 14, r: -5, openX: -84, openY: 16, openR: -6, z: 5 },
   { x: 0, y: 19, r: 0, openX: 0, openY: 22, openR: 0, z: 6 },
   { x: 42, y: 14, r: 5, openX: 84, openY: 16, openR: 6, z: 5 }
+];
+
+const TOKEN_LAYOUTS = [
+  { x: 0, y: -10, openX: -8, openY: -112, z: 5 },
+  { x: -3, y: -6, openX: 14, openY: -88, z: 4 },
+  { x: 4, y: -2, openX: -12, openY: -64, z: 3 },
+  { x: -2, y: 2, openX: 13, openY: -40, z: 2 },
+  { x: 3, y: 6, openX: -9, openY: -16, z: 1 }
 ];
 
 function getClientId() {
@@ -176,7 +187,9 @@ function connectRealtime() {
 
   socket.addEventListener("open", () => {
     setMenuStatus("Connected.");
-    if (roomFromUrl && !snapshot && !autoJoinAttempted) {
+    if (snapshot?.room?.code) {
+      rejoinActiveRoom();
+    } else if (roomFromUrl && !autoJoinAttempted) {
       autoJoinAttempted = true;
       joinRoom();
     }
@@ -229,15 +242,29 @@ function sendEvent(event, payload, callback) {
   }
 
   const id = requestId;
+  const outboundPayload = event === "gameAction"
+    ? { clientId, code: snapshot?.room?.code, seat: mySeat(), action: payload }
+    : { ...(payload || {}), clientId };
   requestId += 1;
   pendingReplies.set(id, callback || (() => {}));
-  socket.send(JSON.stringify({ id, event, payload }));
+  socket.send(JSON.stringify({ id, event, payload: outboundPayload }));
 
   window.setTimeout(() => {
     if (!pendingReplies.has(id)) return;
     pendingReplies.delete(id);
     callback?.({ ok: false, message: "The server did not answer in time." });
   }, 8000);
+}
+
+function rejoinActiveRoom() {
+  const code = snapshot?.room?.code || roomCodeInput.value.trim().toUpperCase();
+  if (!code) return;
+  const name = playerNameInput.value.trim() || "Jester";
+  sendEvent("joinRoom", { code, name }, (result) => {
+    if (!result?.ok) {
+      setMenuStatus(result?.message || "Could not rejoin room.");
+    }
+  });
 }
 
 function startHttpFallback() {
@@ -283,6 +310,7 @@ async function sendHttpEvent(event, payload, callback) {
   const routes = {
     createRoom: "/api/create-room",
     joinRoom: "/api/join-room",
+    leaveRoom: "/api/leave-room",
     gameAction: "/api/action"
   };
   const route = routes[event];
@@ -452,6 +480,37 @@ function getDeckLayout(index) {
   };
 }
 
+function getTokenLayout(index) {
+  return TOKEN_LAYOUTS[index] || {
+    x: 0,
+    y: index * 4,
+    openX: index % 2 === 0 ? -8 : 10,
+    openY: -18 - index * 22,
+    z: index + 1
+  };
+}
+
+function clearHandFocus() {
+  inspectedCardIndex = null;
+  heldCardIndex = null;
+  selectedCardIndex = null;
+}
+
+function tuckPlayPieces() {
+  deckExpanded = false;
+  showingTokens = false;
+  inspectedCardIndex = null;
+  heldCardIndex = null;
+  selectedCardIndex = null;
+  selectedToken = null;
+  clearCardDrag();
+}
+
+function isInsideDeckArea(x, y) {
+  const deckRect = handEl.getBoundingClientRect();
+  return x >= deckRect.left && x <= deckRect.right && y >= deckRect.top && y <= deckRect.bottom;
+}
+
 function canPlaceCard(index, value) {
   const game = currentGame();
   if (!game) return false;
@@ -508,28 +567,55 @@ function updateDragGhostPosition(x, y) {
   draggedCard.ghost.style.top = `${y}px`;
 }
 
+function animateCardToTile(handIndex, tileIndex) {
+  const source = handEl.querySelector(`[data-hand-index="${handIndex}"]`);
+  const target = boardEl.querySelector(`[data-tile-index="${tileIndex}"]`);
+  if (!source || !target) return;
+
+  const sourceRect = source.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  const ghost = source.cloneNode(true);
+  ghost.classList.remove("selected", "held-card", "inspected", "drawn-card");
+  ghost.classList.add("drag-ghost", "place-ghost");
+  ghost.style.width = `${sourceRect.width}px`;
+  ghost.style.height = `${sourceRect.height}px`;
+  ghost.style.left = `${sourceRect.left + sourceRect.width / 2}px`;
+  ghost.style.top = `${sourceRect.top + sourceRect.height / 2}px`;
+  document.body.appendChild(ghost);
+
+  window.requestAnimationFrame(() => {
+    ghost.style.left = `${targetRect.left + targetRect.width / 2}px`;
+    ghost.style.top = `${targetRect.top + targetRect.height / 2}px`;
+    ghost.style.transform = "translate(-50%, -50%) rotate(0deg) scale(.74)";
+    ghost.style.opacity = ".35";
+  });
+  window.setTimeout(() => ghost.remove(), 300);
+}
+
 function clearCardDrag() {
   draggedCard?.ghost?.remove();
   draggedCard?.card?.classList.remove("drag-source");
   draggedCard = null;
   dragCandidate = null;
-  handEl.classList.remove("deck-dragging", "deck-expanded");
+  handEl.classList.remove("deck-dragging", "deck-holding");
+  handEl.querySelectorAll(".held-card").forEach((card) => card.classList.remove("held-card"));
   gameShell.classList.remove("dragging-card");
   clearBoardDragTargets();
 }
 
 function startCardDrag(candidate, event) {
-  if (!candidate || draggedCard || inspectOverlay.classList.contains("show")) return;
+  if (!deckExpanded || !candidate || draggedCard || inspectOverlay.classList.contains("show")) return;
   if (candidate.card.dataset.suppressClick === "true") return;
 
   selectedCardIndex = candidate.index;
   selectedToken = null;
   showingTokens = false;
-  deckExpanded = false;
+  inspectedCardIndex = null;
+  heldCardIndex = candidate.index;
 
   const rect = candidate.card.getBoundingClientRect();
   const ghost = candidate.card.cloneNode(true);
-  ghost.classList.remove("selected", "drawn-card", "is-holding");
+  ghost.classList.remove("selected", "held-card", "inspected", "drawn-card", "is-holding");
   ghost.classList.add("drag-ghost");
   ghost.style.width = `${rect.width}px`;
   ghost.style.height = `${rect.height}px`;
@@ -537,7 +623,6 @@ function startCardDrag(candidate, event) {
 
   candidate.card.dataset.suppressClick = "true";
   candidate.card.classList.add("drag-source");
-  handEl.classList.remove("deck-expanded");
   handEl.classList.add("deck-dragging");
   gameShell.classList.add("dragging-card");
 
@@ -554,24 +639,35 @@ function finishCardDrag(event) {
 
   if (tileIndex === null) {
     deckExpanded = true;
-    setLocalMessage("Drag a card onto the board to place it.");
+    heldCardIndex = null;
+    selectedCardIndex = null;
+    inspectedCardIndex = null;
+    if (isInsideDeckArea(event.clientX, event.clientY)) {
+      setLocalMessage("Card returned to the deck.");
+      return;
+    }
+    setLocalMessage("Drag a card onto a valid tile, or release it over the deck.");
     return;
   }
 
   if (!canPlaceCard(tileIndex, value)) {
     deckExpanded = true;
+    heldCardIndex = null;
+    selectedCardIndex = null;
     setLocalMessage("That tile cannot take this card.");
     return;
   }
 
   selectedCardIndex = index;
   selectedToken = null;
+  animateCardToTile(index, tileIndex);
   sendAction({ type: "placeCard", handIndex: index, tileIndex });
 }
 
 function updateCardDragFromPointer(event) {
   if (!dragCandidate || dragCandidate.pointerId !== event.pointerId) return;
   if (inspectOverlay.classList.contains("show")) return;
+  window.clearTimeout(dragCandidate.holdTimer);
   const dx = event.clientX - dragCandidate.startX;
   const dy = event.clientY - dragCandidate.startY;
   if (!dragCandidate.dragging && Math.hypot(dx, dy) > 10) {
@@ -597,6 +693,8 @@ function endCardDragFromPointer(event, cancelled = false) {
     event.preventDefault();
     if (cancelled) {
       deckExpanded = true;
+      heldCardIndex = null;
+      selectedCardIndex = null;
       clearCardDrag();
       render();
       return;
@@ -604,13 +702,14 @@ function endCardDragFromPointer(event, cancelled = false) {
     finishCardDrag(event);
     return;
   }
+  window.clearTimeout(dragCandidate.holdTimer);
   dragCandidate = null;
 }
 
 function bindCardDrag(card, index, value, isUnavailable) {
   card.addEventListener("pointerdown", (event) => {
     if (event.button && event.button !== 0) return;
-    if (isUnavailable || showingTokens) return;
+    if (isUnavailable || !deckExpanded) return;
     dragCandidate = {
       card,
       index,
@@ -618,8 +717,22 @@ function bindCardDrag(card, index, value, isUnavailable) {
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
+      holdTimer: null,
       dragging: false
     };
+    dragCandidate.holdTimer = window.setTimeout(() => {
+      if (!dragCandidate || dragCandidate.card !== card || dragCandidate.pointerId !== event.pointerId) return;
+      inspectedCardIndex = null;
+      heldCardIndex = index;
+      selectedCardIndex = index;
+      selectedToken = null;
+      card.dataset.suppressClick = "true";
+      card.classList.add("held-card");
+      handEl.classList.add("deck-holding");
+      updateBoardDragTargets(value);
+      localMessage = `${CARD_NAMES[value]} readied. Tap a tile or drag it onto the board.`;
+      messageEl.textContent = localMessage;
+    }, 330);
     try {
       card.setPointerCapture(event.pointerId);
     } catch {
@@ -665,6 +778,11 @@ function render() {
     resetRenderMemory();
     previousShowingTokens = false;
     deckExpanded = false;
+    showingTokens = false;
+    inspectedCardIndex = null;
+    heldCardIndex = null;
+    selectedToken = null;
+    selectedCardIndex = null;
   }
 
   renderWaitingRoom();
@@ -829,10 +947,12 @@ function renderHand() {
   const hadHandMemory = previousHandValues.length > 0;
   handEl.innerHTML = "";
   handEl.classList.toggle("needs-card-glow", isMyTurn() && !game.cardPlacedThisTurn && !game.extraCardPlacement && !game.pendingShot && game.pendingWitchTile === null);
-  handEl.classList.toggle("deck-expanded", deckExpanded && !showingTokens);
+  handEl.classList.toggle("deck-expanded", deckExpanded);
   handEl.classList.toggle("deck-dragging", !!draggedCard);
-  handEl.closest(".hand-panel")?.classList.toggle("deck-expanded", deckExpanded && !showingTokens);
+  handEl.classList.toggle("deck-holding", heldCardIndex !== null && !draggedCard);
+  handEl.closest(".hand-panel")?.classList.toggle("deck-expanded", deckExpanded);
   handEl.closest(".hand-panel")?.classList.toggle("deck-dragging", !!draggedCard);
+  handEl.closest(".hand-panel")?.classList.toggle("tokens-expanded", showingTokens);
 
   if (!player) {
     handEl.innerHTML = `<div class="token-view-label show">Spectating</div>`;
@@ -856,33 +976,40 @@ function renderHand() {
     card.dataset.handIndex = String(index);
     if (!hadHandMemory || previousHandValues[index] !== value) card.classList.add("drawn-card");
     if (selectedCardIndex === index) card.classList.add("selected");
+    if (inspectedCardIndex === index) card.classList.add("inspected");
+    if (heldCardIndex === index && !draggedCard) card.classList.add("held-card");
     const isUnavailable = !isMyTurn() || !!game.pendingShot || game.pendingWitchTile !== null;
     card.classList.toggle("is-disabled", isUnavailable);
     card.setAttribute("aria-disabled", String(isUnavailable));
-    card.setAttribute("aria-label", `${CARD_NAMES[value]}, ${value}. ${deckExpanded ? "Tap to select or drag to a board tile." : "Tap to open the deck."}`);
+    card.setAttribute("aria-label", `${CARD_NAMES[value]}, ${value}. ${deckExpanded ? "Tap to inspect. Hold to ready or drag." : "Tap to open the deck."}`);
     card.innerHTML = `
       <div class="power-badge">${value}</div>
       <div class="suit-badge">JG</div>
       <div class="hand-art"></div>
       <div class="hand-name">${CARD_NAMES[value]}</div>
-      <div class="hand-rules">${getCardHint(value)}</div>
+      <div class="hand-rules">${inspectedCardIndex === index ? CARD_DETAILS[value] : getCardHint(value)}</div>
     `;
-    bindHoldInfo(card, () => getCardInspectInfo(value), 760);
     bindCardDrag(card, index, value, isUnavailable);
-    card.addEventListener("click", () => {
-      if (consumeHeldClick(card) || isUnavailable) return;
+    card.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (consumeHeldClick(card)) return;
       if (!deckExpanded) {
         deckExpanded = true;
-        selectedCardIndex = null;
+        clearHandFocus();
         selectedToken = null;
-        showingTokens = false;
-        setLocalMessage("Deck opened. Drag a card to the board, or tap a card then tile.");
+        setLocalMessage("Deck opened. Tap a card to inspect it, or hold to ready it.");
         return;
       }
-      selectedCardIndex = selectedCardIndex === index ? null : index;
+      if (isUnavailable) {
+        inspectedCardIndex = inspectedCardIndex === index ? null : index;
+        setLocalMessage(inspectedCardIndex === index ? `${CARD_NAMES[value]} revealed.` : "Card tucked back into the deck.");
+        return;
+      }
+      selectedCardIndex = null;
+      heldCardIndex = null;
+      inspectedCardIndex = inspectedCardIndex === index ? null : index;
       selectedToken = null;
-      showingTokens = false;
-      setLocalMessage(`Selected ${value} - ${CARD_NAMES[value]}. Tap a valid tile.`);
+      setLocalMessage(inspectedCardIndex === index ? `${CARD_NAMES[value]} revealed.` : "Card tucked back into the deck.");
     });
     handEl.appendChild(card);
   });
@@ -903,9 +1030,16 @@ function renderTokens() {
   TOKEN_TYPES.forEach((token) => {
     const button = document.createElement("button");
     const available = player.tokens[token.id] || 0;
+    const tokenIndex = TOKEN_TYPES.findIndex((item) => item.id === token.id);
+    const layout = getTokenLayout(tokenIndex);
     nextTokenCounts[token.id] = available;
     button.className = "token-button";
-    button.style.setProperty("--draw-order", TOKEN_TYPES.findIndex((item) => item.id === token.id));
+    button.style.setProperty("--draw-order", tokenIndex);
+    button.style.setProperty("--token-x", `${layout.x}px`);
+    button.style.setProperty("--token-y", `${layout.y}px`);
+    button.style.setProperty("--token-open-x", `${layout.openX}px`);
+    button.style.setProperty("--token-open-y", `${layout.openY}px`);
+    button.style.setProperty("--token-z", layout.z);
     if (showingTokens && !previousShowingTokens) button.classList.add("token-enter");
     if (previousTokenCounts[token.id] !== undefined && previousTokenCounts[token.id] !== available) button.classList.add("token-changed");
     button.innerHTML = `
@@ -917,14 +1051,21 @@ function renderTokens() {
     button.classList.toggle("is-disabled", isUnavailable);
     button.setAttribute("aria-disabled", String(isUnavailable));
     if (selectedToken === token.id) button.classList.add("selected");
-    bindHoldInfo(button, () => getTokenInspectInfo(token));
-    button.addEventListener("click", () => {
-      if (consumeHeldClick(button) || isUnavailable) return;
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (consumeHeldClick(button)) return;
+      if (!showingTokens) {
+        showingTokens = true;
+        clearHandFocus();
+        setLocalMessage("Tokens untucked. Tap a token, then a tile.");
+        return;
+      }
+      if (isUnavailable) return;
       if (game.pendingShot && token.id === "pierce") {
         sendAction({ type: "armorPierce" });
         return;
       }
-      selectedCardIndex = null;
+      clearHandFocus();
       selectedToken = selectedToken === token.id ? null : token.id;
       explainToken(token.id);
       render();
@@ -935,20 +1076,16 @@ function renderTokens() {
 }
 
 function renderTokenView() {
-  if (showingTokens) {
-    deckExpanded = false;
-    handEl.classList.remove("deck-expanded", "deck-dragging");
-    handEl.closest(".hand-panel")?.classList.remove("deck-expanded", "deck-dragging");
-  }
-  handEl.classList.toggle("hidden", showingTokens);
-  tokensEl.classList.toggle("hidden", !showingTokens || tokensEl.children.length === 0);
+  handEl.classList.remove("hidden");
+  tokensEl.classList.toggle("hidden", tokensEl.children.length === 0);
+  tokensEl.classList.toggle("token-expanded", showingTokens);
   emptyTokenLabel.classList.toggle("show", showingTokens && tokensEl.children.length === 0);
-  if (handSectionTitle) handSectionTitle.textContent = showingTokens ? "Token Pouch" : "Your Hand";
+  if (handSectionTitle) handSectionTitle.textContent = "Your Hand";
   const pouchTitle = tokenPanelBtn.querySelector(".pouch-title");
-  if (pouchTitle) pouchTitle.textContent = showingTokens ? "Cards" : "Tokens";
+  if (pouchTitle) pouchTitle.textContent = showingTokens ? "Tuck" : "Tokens";
   tokenPanelBtn.classList.toggle("is-open", showingTokens);
   tokenPanelBtn.setAttribute("aria-pressed", String(showingTokens));
-  tokenPanelBtn.setAttribute("aria-label", showingTokens ? "Close token pouch" : "Open token pouch");
+  tokenPanelBtn.setAttribute("aria-label", showingTokens ? "Tuck tokens" : "Untuck tokens");
   previousShowingTokens = showingTokens;
 }
 
@@ -1031,7 +1168,16 @@ function onTileClick(index) {
     return;
   }
   if (selectedCardIndex !== null) {
+    const player = myPlayer();
+    if (player && canPlaceCard(index, player.hand[selectedCardIndex])) {
+      animateCardToTile(selectedCardIndex, index);
+    }
     sendAction({ type: "placeCard", handIndex: selectedCardIndex, tileIndex: index });
+    return;
+  }
+  if (deckExpanded || showingTokens || inspectedCardIndex !== null) {
+    tuckPlayPieces();
+    render();
     return;
   }
   sendAction({ type: "removeToken", tileIndex: index }, false);
@@ -1049,6 +1195,8 @@ function sendAction(action, clearSelection = true) {
       selectedToken = null;
       showingTokens = false;
       deckExpanded = false;
+      inspectedCardIndex = null;
+      heldCardIndex = null;
     }
   });
 }
@@ -1085,6 +1233,22 @@ function joinRoom() {
   });
 }
 
+function leaveRoom() {
+  const code = snapshot?.room?.code;
+  const seat = mySeat();
+  if (code) {
+    sendEvent("leaveRoom", { code, seat }, () => {});
+  }
+  snapshot = null;
+  renderRoomCode = "";
+  previousRoomPhase = "";
+  localMessage = "";
+  roomCodeInput.value = "";
+  autoJoinAttempted = true;
+  window.history.replaceState(null, "", window.location.pathname);
+  showScreen("menu");
+}
+
 async function copyInvite() {
   if (!snapshot?.room?.code) return;
   const url = `${window.location.origin}${window.location.pathname}?room=${snapshot.room.code}`;
@@ -1107,21 +1271,33 @@ roomCodeInput.addEventListener("input", () => {
 document.getElementById("rulesBtn").addEventListener("click", () => showScreen("rules"));
 document.getElementById("backRules").addEventListener("click", () => showScreen(snapshot ? "game" : "menu"));
 document.getElementById("backToMenu").addEventListener("click", () => showScreen("menu"));
+waitingBackBtn.addEventListener("click", leaveRoom);
 document.getElementById("resetBtn").addEventListener("click", () => {
   if (snapshot) sendAction({ type: "restart" });
 });
 document.getElementById("endTurnBtn").addEventListener("click", () => sendAction({ type: "endTurn" }));
 document.getElementById("cancelBtn").addEventListener("click", () => sendAction({ type: "cancel" }));
-bindHorizontalWheel(tokensEl);
 window.addEventListener("pointermove", updateCardDragFromPointer, { passive: false });
 window.addEventListener("pointerup", endCardDragFromPointer);
 window.addEventListener("pointercancel", (event) => endCardDragFromPointer(event, true));
+window.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  if (!deckExpanded && !showingTokens && inspectedCardIndex === null && heldCardIndex === null && selectedToken === null) return;
+  if (target.closest(".hand-stage, .settings-menu, .settings-button, .modal, .inspect-overlay, .waiting-room")) return;
+  if (target.closest(".tile") && (selectedCardIndex !== null || selectedToken !== null)) return;
+  deckExpanded = false;
+  showingTokens = false;
+  clearHandFocus();
+  selectedToken = null;
+  render();
+});
 readyBtn.addEventListener("click", () => sendAction({ type: "ready" }, false));
 waitingCopyInvite.addEventListener("click", copyInvite);
-tokenPanelBtn.addEventListener("click", () => {
+tokenPanelBtn.addEventListener("click", (event) => {
+  event.stopPropagation();
   showingTokens = !showingTokens;
-  deckExpanded = false;
-  selectedCardIndex = null;
+  clearHandFocus();
   selectedToken = null;
   render();
 });
