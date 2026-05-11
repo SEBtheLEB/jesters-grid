@@ -154,6 +154,9 @@ let previousShowingTokens = false;
 let introTimer = null;
 let botTurnTimer = null;
 let deckMotionTimer = null;
+let inspectReturnTimer = null;
+let pendingBoardCutscene = null;
+let boardCutsceneQueue = Promise.resolve();
 
 const DECK_CARD_LAYOUTS = [
   { x: -46, y: -22, r: -8, openX: -90, openY: -42, openR: -9, z: 2 },
@@ -224,7 +227,9 @@ function activeRoomCode() {
 
 function receiveServerSnapshot(nextSnapshot, renderNow = true) {
   if (!nextSnapshot || isOfflineQuickplay()) return false;
+  const previousSnapshot = snapshot;
   snapshot = nextSnapshot;
+  pendingBoardCutscene = { previous: previousSnapshot, next: nextSnapshot };
   if (snapshot.room?.code) {
     startRoomHeartbeat();
     if (usingHttpFallback) startPolling();
@@ -679,6 +684,7 @@ function setInspectOrigin(element, finalWidth) {
 }
 
 function inspectCardFromElement(card, index, value) {
+  window.clearTimeout(inspectReturnTimer);
   setInspectOrigin(card, Math.min(window.innerWidth * 0.82, 315));
   suppressPieceClickUntil = Date.now() + 520;
   inspectedCardIndex = index;
@@ -690,6 +696,31 @@ function inspectCardFromElement(card, index, value) {
   deckExpanded = false;
   localMessage = `${CARD_NAMES[value]} revealed.`;
   render();
+}
+
+function closeInspectedCardAnimated() {
+  if (inspectedCardIndex === null) return false;
+  window.clearTimeout(inspectReturnTimer);
+  const index = inspectedCardIndex;
+  const card = handEl.querySelector(`[data-hand-index="${index}"].inspected`);
+  suppressPieceClickUntil = Date.now() + 360;
+  if (!card) {
+    inspectedCardIndex = null;
+    deckExpanded = true;
+    selectedCardIndex = null;
+    heldCardIndex = null;
+    render();
+    return true;
+  }
+  card.classList.add("returning");
+  inspectReturnTimer = window.setTimeout(() => {
+    inspectedCardIndex = null;
+    deckExpanded = true;
+    selectedCardIndex = null;
+    heldCardIndex = null;
+    setLocalMessage("Deck opened. Pick your next card.");
+  }, 260);
+  return true;
 }
 
 function inspectTokenFromElement(button, token) {
@@ -805,6 +836,151 @@ function isInsideTokenArea(x, y) {
   const top = Math.min(tokenRect.top, tokensRect.top);
   const bottom = Math.max(tokenRect.bottom, tokensRect.bottom);
   return x >= left - 24 && x <= right + 24 && y >= top - 144 && y <= bottom + 24;
+}
+
+function waitForCutscene(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function tileCenter(index) {
+  const tile = boardEl.querySelector(`[data-tile-index="${index}"]`);
+  if (!tile) return null;
+  const rect = tile.getBoundingClientRect();
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, rect, tile };
+}
+
+function pulseTile(index, className, duration = 520) {
+  const center = tileCenter(index);
+  if (!center) return;
+  center.tile.classList.remove(className);
+  void center.tile.offsetWidth;
+  center.tile.classList.add(className);
+  window.setTimeout(() => center.tile.classList.remove(className), duration);
+}
+
+function spawnRemovedCardEcho(index, card) {
+  const center = tileCenter(index);
+  if (!center || !card) return null;
+  const echo = document.createElement("div");
+  echo.className = `card cutscene-removed-card p${card.owner}-card`;
+  echo.style.left = `${center.x}px`;
+  echo.style.top = `${center.y}px`;
+  echo.style.width = `${Math.max(44, center.rect.width * 0.78)}px`;
+  echo.style.height = `${Math.max(52, center.rect.height * 0.84)}px`;
+  echo.innerHTML = `
+    <div class="power-badge">${card.value}</div>
+    <div class="suit-badge">JG</div>
+    <div class="card-art"></div>
+    <div class="card-name">${CARD_NAMES[card.value]}</div>
+  `;
+  document.body.appendChild(echo);
+  window.setTimeout(() => echo.classList.add("hit"), 360);
+  window.setTimeout(() => echo.remove(), 860);
+  return echo;
+}
+
+function fireShotVfx(fromIndex, toIndex, removedCard = null) {
+  const from = tileCenter(fromIndex);
+  const to = tileCenter(toIndex);
+  if (!from || !to) return;
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const distance = Math.hypot(dx, dy);
+  const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+  const shot = document.createElement("div");
+  shot.className = "shot-vfx";
+  shot.style.left = `${from.x}px`;
+  shot.style.top = `${from.y}px`;
+  shot.style.width = `${distance}px`;
+  shot.style.transform = `rotate(${angle}deg)`;
+  document.body.appendChild(shot);
+  spawnRemovedCardEcho(toIndex, removedCard);
+  pulseTile(toIndex, "shot-impact", 520);
+  window.setTimeout(() => shot.remove(), 620);
+}
+
+function stunTileVfx(index) {
+  const center = tileCenter(index);
+  if (!center) return;
+  pulseTile(index, "witch-stun-vfx", 760);
+  const rune = document.createElement("div");
+  rune.className = "stun-rune-vfx";
+  rune.style.left = `${center.x}px`;
+  rune.style.top = `${center.y}px`;
+  document.body.appendChild(rune);
+  window.setTimeout(() => rune.remove(), 760);
+}
+
+function topKeyFromGame(game, index) {
+  const tile = game?.board?.[index];
+  const card = tile ? topCard(tile) : null;
+  return card ? `${card.owner}:${card.value}:${card.stunned}:${card.protected}:${tile.stack.length}` : "empty";
+}
+
+function stunLevelFromGame(game, index) {
+  const tile = game?.board?.[index];
+  const card = tile ? topCard(tile) : null;
+  return tile ? Math.max(tile.stunTurns || 0, card?.stunned ? 1 : 0) : 0;
+}
+
+function detectBoardCutscenes(previousSnapshot, nextSnapshot) {
+  const previousGame = previousSnapshot?.game;
+  const nextGame = nextSnapshot?.game;
+  if (!previousGame || !nextGame || nextSnapshot?.room?.phase !== "playing") return [];
+  const events = [];
+
+  if (!previousGame.pendingShot && nextGame.pendingShot?.fromIndex !== undefined) {
+    events.push({ type: "shooter-ready", from: nextGame.pendingShot.fromIndex });
+  }
+
+  if (previousGame.pendingShot && !nextGame.pendingShot) {
+    const shot = previousGame.pendingShot;
+    const targetIndex = (shot.targets || []).find((index) => {
+      const before = previousGame.board[index];
+      const after = nextGame.board[index];
+      return before && after && before.stack.length > after.stack.length;
+    }) ?? (shot.targets || []).find((index) => topKeyFromGame(previousGame, index) !== topKeyFromGame(nextGame, index));
+    if (Number.isInteger(targetIndex) && /shot landed|parry|shot was dodged/i.test(nextGame.lastMessage || "")) {
+      events.push({ type: "shot", from: shot.fromIndex, to: targetIndex, removedCard: topCard(previousGame.board[targetIndex]) });
+    }
+  }
+
+  for (let index = 0; index < 16; index += 1) {
+    if (stunLevelFromGame(previousGame, index) <= 0 && stunLevelFromGame(nextGame, index) > 0) {
+      events.push({ type: "witch-stun", tile: index });
+    }
+  }
+
+  return events;
+}
+
+async function playBoardCutscenes(events) {
+  for (const event of events) {
+    if (event.type === "shooter-ready") {
+      pulseTile(event.from, "shooter-cutscene", 560);
+      await waitForCutscene(260);
+    }
+    if (event.type === "shot") {
+      pulseTile(event.from, "shooter-cutscene", 520);
+      await waitForCutscene(170);
+      fireShotVfx(event.from, event.to, event.removedCard);
+      await waitForCutscene(620);
+    }
+    if (event.type === "witch-stun") {
+      stunTileVfx(event.tile);
+      await waitForCutscene(210);
+    }
+  }
+}
+
+function flushBoardCutscenes() {
+  if (!pendingBoardCutscene || pendingBoardCutscene.next !== snapshot) return;
+  const events = detectBoardCutscenes(pendingBoardCutscene.previous, pendingBoardCutscene.next);
+  pendingBoardCutscene = null;
+  if (!events.length) return;
+  boardCutsceneQueue = boardCutsceneQueue
+    .then(() => playBoardCutscenes(events))
+    .catch(() => {});
 }
 
 function canPlaceCard(first, second, third) {
@@ -1763,8 +1939,8 @@ function checkWin(game) {
 
 function endTurn(game) {
   if (!game.cardPlacedThisTurn) return fail("You must place one card before ending your turn.");
+  if (game.pendingWitchTile !== null) return fail("Choose a tile for the Witch stun first.");
   game.pendingShot = null;
-  game.pendingWitchTile = null;
   game.tokensUsed = 0;
   game.placedTokensThisTurn = [];
   game.cardPlacedThisTurn = false;
@@ -1783,9 +1959,7 @@ function cancelSelection(game) {
     return ok();
   }
   if (game.pendingWitchTile !== null) {
-    game.pendingWitchTile = null;
-    setMessage(game, "Witch stun skipped.");
-    return ok();
+    return fail("Choose a tile for the Witch stun first.");
   }
   setMessage(game, "Selection cancelled.");
   return ok();
@@ -1798,10 +1972,12 @@ function scheduleOfflineBotTurn() {
   render();
   botTurnTimer = window.setTimeout(() => {
     if (!isOfflineQuickplay() || currentGame()?.current !== 1 || currentGame()?.gameOver) return;
+    const previousSnapshot = structuredClone(snapshot);
     runBotTurn({ mode: "quickplay", phase: "playing", botSeat: 1, game: currentGame() });
     refreshLocalPlayerStats();
     localMessage = "";
     clearHandFocus();
+    pendingBoardCutscene = { previous: previousSnapshot, next: snapshot };
     render();
   }, 520);
 }
@@ -2217,6 +2393,7 @@ function render() {
   renderWin();
   if (phaseChanged) showTurnIntro();
   previousRoomPhase = phase;
+  flushBoardCutscenes();
 }
 
 function renderWaitingRoom() {
@@ -2294,8 +2471,8 @@ function renderStatus() {
   tokenLimit.textContent = `${game.tokensUsed}/2`;
   cancelBtn.textContent = game.pendingShot ? "Skip" : "Cancel";
   messageEl.textContent = localMessage || game.lastMessage || "Make your move.";
-  document.getElementById("endTurnBtn").disabled = !isMyTurn() || !game.cardPlacedThisTurn;
-  cancelBtn.disabled = !isMyTurn();
+  document.getElementById("endTurnBtn").disabled = !isMyTurn() || !game.cardPlacedThisTurn || game.pendingWitchTile !== null;
+  cancelBtn.disabled = !isMyTurn() || game.pendingWitchTile !== null;
 }
 
 function renderBoard() {
@@ -2419,14 +2596,7 @@ function renderHand() {
         return;
       }
       if (inspectedCardIndex === index) {
-        card.classList.add("returning");
-        window.setTimeout(() => {
-          inspectedCardIndex = null;
-          deckExpanded = true;
-          selectedCardIndex = null;
-          heldCardIndex = null;
-          setLocalMessage("Deck opened. Pick your next card.");
-        }, 220);
+        closeInspectedCardAnimated();
         return;
       }
       if (isUnavailable) {
@@ -2633,6 +2803,10 @@ function onTileClick(index) {
     sendAction({ type: "shoot", tileIndex: index });
     return;
   }
+  if (inspectedCardIndex !== null) {
+    closeInspectedCardAnimated();
+    return;
+  }
   if (selectedToken) {
     animateTokenToTile(selectedToken, index);
     sendAction({ type: "useToken", tokenType: selectedToken, tileIndex: index });
@@ -2658,6 +2832,7 @@ function onTileClick(index) {
 
 function sendAction(action, clearSelection = true, recoveryAttempt = 0) {
   if (isOfflineQuickplay()) {
+    const previousSnapshot = structuredClone(snapshot);
     const result = performOfflineAction(action);
     if (!result?.ok) {
       setLocalMessage(result?.message || "That move is not available.");
@@ -2678,6 +2853,7 @@ function sendAction(action, clearSelection = true, recoveryAttempt = 0) {
         showingTokens = false;
       }
     }
+    pendingBoardCutscene = { previous: previousSnapshot, next: snapshot };
     render();
     if (action.type === "endTurn" && result.ok) scheduleOfflineBotTurn();
     return;
@@ -2864,11 +3040,7 @@ window.addEventListener("click", (event) => {
   if (!deckExpanded && !showingTokens && inspectedCardIndex === null && inspectedTokenId === null && heldCardIndex === null && heldTokenId === null && selectedToken === null) return;
   if (target.closest(".settings-menu, .settings-button, .modal, .inspect-overlay, .waiting-room")) return;
   if (inspectedCardIndex !== null) {
-    inspectedCardIndex = null;
-    deckExpanded = true;
-    heldCardIndex = null;
-    selectedCardIndex = null;
-    render();
+    closeInspectedCardAnimated();
     return;
   }
   if (inspectedTokenId !== null) {

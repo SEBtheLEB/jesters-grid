@@ -1174,8 +1174,8 @@ function checkWin(game) {
 
 function endTurn(game) {
   if (!game.cardPlacedThisTurn) return fail("You must place one card before ending your turn.");
+  if (game.pendingWitchTile !== null) return fail("Choose a tile for the Witch stun first.");
   game.pendingShot = null;
-  game.pendingWitchTile = null;
   game.tokensUsed = 0;
   game.placedTokensThisTurn = [];
   game.cardPlacedThisTurn = false;
@@ -1194,9 +1194,7 @@ function cancelSelection(game) {
     return ok();
   }
   if (game.pendingWitchTile !== null) {
-    game.pendingWitchTile = null;
-    setMessage(game, "Witch stun skipped.");
-    return ok();
+    return fail("Choose a tile for the Witch stun first.");
   }
   setMessage(game, "Selection cancelled.");
   return ok();
