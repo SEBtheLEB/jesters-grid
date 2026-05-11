@@ -790,6 +790,26 @@ button:active:not(:disabled) {
     0 0 18px rgba(247, 217, 135, .3);
 }
 
+.board.drag-targeting .tile {
+  filter: saturate(.82) brightness(.92);
+}
+
+.board.drag-targeting .tile.drag-selectable {
+  filter: brightness(1.12) saturate(1.08);
+  border-color: var(--gold);
+  box-shadow:
+    inset 0 0 0 2px rgba(247, 217, 135, .72),
+    0 0 20px rgba(247, 217, 135, .26);
+}
+
+.board.drag-targeting .tile.drag-hover {
+  transform: scale(1.035);
+  border-color: #fff0b6;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 240, 182, .94),
+    0 0 26px rgba(247, 217, 135, .44);
+}
+
 .tile.targetable {
   border-color: var(--danger);
   box-shadow:
@@ -901,6 +921,21 @@ button:active:not(:disabled) {
   100% {
     opacity: 1;
     transform: translateY(0) scale(1) rotate(0);
+    filter: brightness(1);
+  }
+}
+
+@keyframes deck-card-draw-in {
+  0% {
+    opacity: 0;
+    filter: brightness(1.22) blur(1px);
+  }
+  64% {
+    opacity: 1;
+    filter: brightness(1.12);
+  }
+  100% {
+    opacity: 1;
     filter: brightness(1);
   }
 }
@@ -1102,7 +1137,8 @@ button:active:not(:disabled) {
   display: grid;
   grid-template-rows: 20px minmax(0, 1fr);
   gap: 5px;
-  overflow: hidden;
+  overflow: visible;
+  transition: transform .18s ease, opacity .18s ease, filter .18s ease;
 }
 
 .section-label {
@@ -1129,37 +1165,65 @@ button:active:not(:disabled) {
   text-overflow: ellipsis;
 }
 
+.hand-panel.deck-expanded .section-label {
+  opacity: 0;
+  transition: opacity .16s ease;
+}
+
 .hand-stage {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 48px;
+  grid-template-columns: minmax(0, 1fr) 58px;
   align-items: stretch;
-  gap: 7px;
-  overflow: hidden;
+  gap: 4px;
+  overflow: visible;
 }
 
 .hand-scroll {
   min-width: 0;
   min-height: 0;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .hand {
   min-width: 0;
   min-height: 0;
   height: 100%;
-  display: flex;
-  align-items: stretch;
-  gap: 7px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 5px 1px 8px;
-  scroll-snap-type: x proximity;
-  scroll-behavior: smooth;
+  position: relative;
+  display: block;
+  overflow: visible;
+  padding: 0;
+  cursor: pointer;
   scrollbar-width: none;
-  touch-action: pan-x;
+  touch-action: none;
+}
+
+.hand::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: min(82%, 310px);
+  height: 30px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, .5), transparent 68%);
+  opacity: .82;
+  pointer-events: none;
+  transition: width .2s ease, opacity .2s ease;
+}
+
+.hand.deck-expanded::before {
+  width: min(96%, 360px);
+  opacity: .95;
+}
+
+.game-shell.dragging-card .hand-panel {
+  transform: translateY(18px) scale(.94);
+  opacity: .78;
+  filter: saturate(.82);
 }
 
 .hand::-webkit-scrollbar,
@@ -1176,15 +1240,24 @@ button:active:not(:disabled) {
 }
 
 .hand-card {
-  width: clamp(76px, 22vw, 92px);
-  min-width: clamp(76px, 22vw, 92px);
-  height: 100%;
-  min-height: 112px;
-  max-height: none;
+  --active-deck-x: var(--deck-x, 0px);
+  --active-deck-y: var(--deck-y, 0px);
+  --active-deck-rot: var(--deck-rot, 0deg);
+  --deck-scale: .84;
+  --card-lift: 0px;
+  position: absolute;
+  left: 50%;
+  top: 51%;
+  z-index: var(--deck-z, 1);
+  width: clamp(84px, 24vw, 104px);
+  min-width: 0;
+  height: clamp(116px, 17.4svh, 138px);
+  min-height: 0;
+  max-height: 100%;
   display: grid;
-  grid-template-rows: minmax(42px, 1fr) auto auto;
-  flex: 0 0 auto;
-  scroll-snap-align: start;
+  grid-template-rows: minmax(38px, 1fr) auto minmax(28px, auto);
+  flex: none;
+  scroll-snap-align: none;
   padding: 6px 5px 5px;
   border-radius: 7px;
   color: var(--ink);
@@ -1196,8 +1269,52 @@ button:active:not(:disabled) {
     inset 0 0 0 1px rgba(255, 255, 255, .34),
     inset 0 -9px 14px rgba(87, 45, 22, .16),
     0 7px 13px rgba(0, 0, 0, .36);
-  transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
-  touch-action: manipulation;
+  transform:
+    translate(
+      calc(-50% + var(--active-deck-x)),
+      calc(-50% + var(--active-deck-y) + var(--card-lift))
+    )
+    rotate(var(--active-deck-rot))
+    scale(var(--deck-scale));
+  transform-origin: 50% 84%;
+  user-select: none;
+  -webkit-user-drag: none;
+  cursor: grab;
+  transition: transform .22s cubic-bezier(.2, .9, .24, 1), box-shadow .18s ease, filter .18s ease, opacity .18s ease;
+  touch-action: none;
+  will-change: transform;
+}
+
+.hand.deck-expanded .hand-card {
+  --active-deck-x: var(--deck-open-x, var(--deck-x, 0px));
+  --active-deck-y: var(--deck-open-y, var(--deck-y, 0px));
+  --active-deck-rot: var(--deck-open-rot, var(--deck-rot, 0deg));
+  --deck-scale: .98;
+}
+
+.hand.deck-dragging .hand-card {
+  --deck-scale: .74;
+  opacity: .72;
+  filter: saturate(.78) brightness(.88);
+}
+
+.hand-card.drag-source {
+  visibility: hidden;
+  opacity: 0;
+}
+
+.hand-card.drag-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 500;
+  max-height: none;
+  margin: 0;
+  pointer-events: none;
+  opacity: .98;
+  filter: drop-shadow(0 17px 24px rgba(0, 0, 0, .48)) brightness(1.06);
+  transform: translate(-50%, -50%) rotate(2deg) scale(1.08) !important;
+  transition: none;
 }
 
 .hand-card::before {
@@ -1229,7 +1346,7 @@ button:active:not(:disabled) {
 }
 
 .hand-card.selected {
-  transform: translateY(-5px);
+  --card-lift: -7px;
   box-shadow:
     inset 0 0 0 2px var(--gold),
     0 0 20px rgba(247, 217, 135, .52),
@@ -1245,15 +1362,19 @@ button:active:not(:disabled) {
 
 .hand-card.is-holding,
 .token-button.is-holding {
-  transform: translateY(-4px) scale(1.03);
+  --card-lift: -5px;
   box-shadow:
     inset 0 0 0 2px var(--gold),
     0 0 22px rgba(247, 217, 135, .45),
     0 10px 18px rgba(0, 0, 0, .42);
 }
 
+.token-button.is-holding {
+  transform: translateY(-4px) scale(1.03);
+}
+
 .hand-card.drawn-card {
-  animation: card-draw-in .46s cubic-bezier(.2, .95, .25, 1.15) both;
+  animation: deck-card-draw-in .5s cubic-bezier(.2, .95, .25, 1.15) both;
   animation-delay: calc(var(--draw-order, 0) * 45ms);
 }
 
@@ -1295,10 +1416,10 @@ button:active:not(:disabled) {
 
 .token-toggle {
   position: relative;
-  width: 46px;
-  min-width: 46px;
-  height: 46px;
-  min-height: 46px;
+  width: 50px;
+  min-width: 50px;
+  height: 50px;
+  min-height: 50px;
   align-self: end;
   justify-self: center;
   display: grid;
@@ -1322,8 +1443,8 @@ button:active:not(:disabled) {
 }
 
 .pouch-ornament {
-  width: 31px;
-  height: 31px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
   border: 1px solid rgba(255, 246, 209, .75);
@@ -1345,7 +1466,7 @@ button:active:not(:disabled) {
 .pouch-title {
   position: absolute;
   left: 50%;
-  bottom: -15px;
+  bottom: -16px;
   width: 60px;
   transform: translateX(-50%);
   overflow: hidden;
