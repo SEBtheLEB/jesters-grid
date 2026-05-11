@@ -73,6 +73,10 @@ let socket = null;
 let autoJoinAttempted = false;
 let usingHttpFallback = false;
 let pollTimer = null;
+let roomHeartbeatTimer = null;
+let reconnectTimer = null;
+let rejoinInFlight = false;
+let queuedRejoinCallbacks = [];
 let requestId = 1;
 const pendingReplies = new Map();
 const clientId = getClientId();
@@ -212,6 +216,22 @@ function setLocalMessage(text) {
   render();
 }
 
+function activeRoomCode() {
+  const urlRoom = new URLSearchParams(window.location.search).get("room") || "";
+  return (snapshot?.room?.code || roomCodeInput.value || urlRoom).trim().toUpperCase();
+}
+
+function receiveServerSnapshot(nextSnapshot, renderNow = true) {
+  if (!nextSnapshot || isOfflineQuickplay()) return false;
+  snapshot = nextSnapshot;
+  if (snapshot.room?.code) {
+    startRoomHeartbeat();
+    if (usingHttpFallback) startPolling();
+  }
+  if (renderNow) render();
+  return true;
+}
+
 function isMatchPlaying() {
   return snapshot?.room?.phase === "playing";
 }
@@ -232,21 +252,28 @@ function socketOpen() {
 
 function connectRealtime() {
   if (usingHttpFallback) return;
+  if (socket?.readyState === WebSocket.OPEN || socket?.readyState === WebSocket.CONNECTING) return;
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
   socket = new WebSocket(`${protocol}://${window.location.host}/ws`);
+  const liveSocket = socket;
 
   socket.addEventListener("open", () => {
+    if (socket !== liveSocket) return;
+    window.clearTimeout(reconnectTimer);
+    reconnectTimer = null;
     setMenuStatus("Connected.");
     if (snapshot?.room?.code) {
-      rejoinActiveRoom();
+      rejoinActiveRoom({ silent: true });
     } else if (roomFromUrl && !autoJoinAttempted) {
       autoJoinAttempted = true;
       joinRoom();
     }
+    startRoomHeartbeat();
     render();
   });
 
   socket.addEventListener("message", (event) => {
+    if (socket !== liveSocket) return;
     let message;
     try {
       message = JSON.parse(event.data);
@@ -258,14 +285,16 @@ function connectRealtime() {
       const callback = pendingReplies.get(message.id);
       if (callback) {
         pendingReplies.delete(message.id);
+        const hasSnapshot = receiveServerSnapshot(message.result?.snapshot, false);
         callback(message.result);
+        if (hasSnapshot) render();
       }
       return;
     }
 
     if (message.type === "state") {
       if (isOfflineQuickplay()) return;
-      snapshot = message.snapshot;
+      receiveServerSnapshot(message.snapshot, false);
       localMessage = "";
       render();
       return;
@@ -292,6 +321,7 @@ function connectRealtime() {
   });
 
   socket.addEventListener("close", () => {
+    if (socket !== liveSocket) return;
     if (isOfflineQuickplay()) return;
     if (!snapshot) {
       startHttpFallback();
@@ -299,10 +329,17 @@ function connectRealtime() {
     }
     setMenuStatus("Disconnected. Reconnecting...");
     if (snapshot) render();
-    window.setTimeout(connectRealtime, 1200);
+    socket = null;
+    if (!reconnectTimer) {
+      reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = null;
+        connectRealtime();
+      }, 1200);
+    }
   });
 
   socket.addEventListener("error", () => {
+    if (socket !== liveSocket) return;
     if (!snapshot) startHttpFallback();
   });
 }
@@ -315,16 +352,29 @@ function sendEvent(event, payload, callback) {
 
   const id = requestId;
   const outboundPayload = event === "gameAction"
-    ? { clientId, code: snapshot?.room?.code, seat: mySeat(), action: payload }
+    ? { clientId, code: activeRoomCode(), seat: mySeat(), action: payload }
     : { ...(payload || {}), clientId };
   requestId += 1;
   pendingReplies.set(id, callback || (() => {}));
-  socket.send(JSON.stringify({ id, event, payload: outboundPayload }));
+  try {
+    socket.send(JSON.stringify({ id, event, payload: outboundPayload }));
+  } catch {
+    pendingReplies.delete(id);
+    sendHttpEvent(event, payload, callback);
+    return;
+  }
 
   window.setTimeout(() => {
     if (!pendingReplies.has(id)) return;
     pendingReplies.delete(id);
-    callback?.({ ok: false, message: "The server did not answer in time." });
+    try {
+      socket?.close();
+    } catch {
+      socket = null;
+    }
+    socket = null;
+    startHttpFallback();
+    sendHttpEvent(event, payload, callback);
   }, 8000);
 }
 
@@ -346,15 +396,62 @@ function sendCardDragPreview(tileIndex, active = true) {
   }));
 }
 
-function rejoinActiveRoom() {
-  if (isOfflineQuickplay()) return;
-  const code = snapshot?.room?.code || roomCodeInput.value.trim().toUpperCase();
-  if (!code) return;
-  const name = playerNameInput.value.trim() || "Jester";
-  sendEvent("joinRoom", { code, name }, (result) => {
-    if (!result?.ok) {
-      setMenuStatus(result?.message || "Could not rejoin room.");
+function startRoomHeartbeat() {
+  if (roomHeartbeatTimer || isOfflineQuickplay()) return;
+  roomHeartbeatTimer = window.setInterval(() => {
+    if (isOfflineQuickplay() || !activeRoomCode()) {
+      stopRoomHeartbeat();
+      return;
     }
+    rejoinActiveRoom({ silent: true });
+  }, 9000);
+}
+
+function stopRoomHeartbeat() {
+  if (!roomHeartbeatTimer) return;
+  window.clearInterval(roomHeartbeatTimer);
+  roomHeartbeatTimer = null;
+}
+
+function shouldRecoverRoomError(message) {
+  return /join a room|room not found|spectators cannot move|server did not answer|could not reach/i.test(String(message || ""));
+}
+
+function rejoinActiveRoom(options = {}) {
+  if (typeof options === "function") options = { callback: options };
+  if (isOfflineQuickplay()) {
+    options.callback?.(false);
+    return;
+  }
+  const code = activeRoomCode();
+  if (!code) {
+    options.callback?.(false);
+    return;
+  }
+  if (rejoinInFlight) {
+    if (options.callback) queuedRejoinCallbacks.push(options.callback);
+    return;
+  }
+  rejoinInFlight = true;
+  const name = playerNameInput.value.trim() || "Jester";
+  const finishRejoin = (ok, result) => {
+    rejoinInFlight = false;
+    const callbacks = queuedRejoinCallbacks;
+    queuedRejoinCallbacks = [];
+    options.callback?.(ok, result);
+    callbacks.forEach((callback) => callback(ok, result));
+  };
+  sendEvent("joinRoom", { code, name, heartbeat: !!options.silent }, (result) => {
+    if (!result?.ok) {
+      if (!options.silent) setMenuStatus(result?.message || "Could not rejoin room.");
+      finishRejoin(false, result);
+      return;
+    }
+    if (result.snapshot) receiveServerSnapshot(result.snapshot, false);
+    setMenuStatus("Connected.");
+    startRoomHeartbeat();
+    finishRejoin(true, result);
+    render();
   });
 }
 
@@ -367,6 +464,8 @@ function startHttpFallback() {
     joinRoom();
   }
   startPolling();
+  startRoomHeartbeat();
+  if (activeRoomCode()) rejoinActiveRoom({ silent: true });
   render();
 }
 
@@ -383,15 +482,16 @@ function stopPolling() {
 
 async function pollState() {
   if (isOfflineQuickplay()) return;
-  if (!usingHttpFallback || !snapshot?.room?.code) return;
+  if (!usingHttpFallback || !activeRoomCode()) return;
   const seat = mySeat();
-  const params = new URLSearchParams({ code: snapshot.room.code, clientId, seat: String(seat ?? "") });
+  const params = new URLSearchParams({ code: activeRoomCode(), clientId, seat: String(seat ?? "") });
   try {
     const response = await fetch(`/api/state?${params.toString()}`, { cache: "no-store" });
     const result = await response.json();
     if (result.ok && result.snapshot) {
-      snapshot = result.snapshot;
-      render();
+      receiveServerSnapshot(result.snapshot);
+    } else if (shouldRecoverRoomError(result.message)) {
+      rejoinActiveRoom({ silent: true });
     }
   } catch {
     setMenuStatus("Reconnecting...");
@@ -413,7 +513,7 @@ async function sendHttpEvent(event, payload, callback) {
   }
 
   const body = event === "gameAction"
-    ? { clientId, code: snapshot?.room?.code, seat: mySeat(), action: payload }
+    ? { clientId, code: activeRoomCode(), seat: mySeat(), action: payload }
     : { ...payload, clientId };
 
   try {
@@ -423,12 +523,9 @@ async function sendHttpEvent(event, payload, callback) {
       body: JSON.stringify(body)
     });
     const result = await response.json();
-    if (result.snapshot) {
-      snapshot = result.snapshot;
-      startPolling();
-      render();
-    }
+    const hasSnapshot = receiveServerSnapshot(result.snapshot, false);
     callback?.(result);
+    if (hasSnapshot) render();
   } catch {
     callback?.({ ok: false, message: "Could not reach the server." });
   }
@@ -762,10 +859,10 @@ function animateCardToTile(handIndex, tileIndex) {
   window.requestAnimationFrame(() => {
     ghost.style.left = `${targetRect.left + targetRect.width / 2}px`;
     ghost.style.top = `${targetRect.top + targetRect.height / 2}px`;
-    ghost.style.transform = "translate(-50%, -50%) rotate(0deg) scale(.74)";
-    ghost.style.opacity = ".94";
+    ghost.style.transform = "translate(-50%, -50%) rotate(0deg) scale(.58)";
+    ghost.style.opacity = "0";
   });
-  window.setTimeout(() => ghost.remove(), 300);
+  window.setTimeout(() => ghost.remove(), 360);
 }
 
 function animateDraggedCardToTile(ghost, tileIndex) {
@@ -781,10 +878,10 @@ function animateDraggedCardToTile(ghost, tileIndex) {
   window.requestAnimationFrame(() => {
     ghost.style.left = `${targetRect.left + targetRect.width / 2}px`;
     ghost.style.top = `${targetRect.top + targetRect.height / 2}px`;
-    ghost.style.transform = "translate(-50%, -50%) rotate(0deg) scale(.74)";
-    ghost.style.opacity = ".94";
+    ghost.style.transform = "translate(-50%, -50%) rotate(0deg) scale(.58)";
+    ghost.style.opacity = "0";
   });
-  window.setTimeout(() => ghost.remove(), 320);
+  window.setTimeout(() => ghost.remove(), 380);
 }
 
 function clearCardDrag() {
@@ -2516,7 +2613,7 @@ function onTileClick(index) {
   sendAction({ type: "removeToken", tileIndex: index }, false);
 }
 
-function sendAction(action, clearSelection = true) {
+function sendAction(action, clearSelection = true, recoveryAttempt = 0) {
   if (isOfflineQuickplay()) {
     const result = performOfflineAction(action);
     if (!result?.ok) {
@@ -2545,6 +2642,16 @@ function sendAction(action, clearSelection = true) {
 
   sendEvent("gameAction", action, (result) => {
     if (!result?.ok) {
+      if (recoveryAttempt < 2 && shouldRecoverRoomError(result?.message)) {
+        setLocalMessage("Reconnecting to the room...");
+        rejoinActiveRoom({
+          silent: true,
+          callback: () => {
+            window.setTimeout(() => sendAction(action, clearSelection, recoveryAttempt + 1), recoveryAttempt === 0 ? 160 : 520);
+          }
+        });
+        return;
+      }
       setLocalMessage(result?.message || "That move is not available.");
       return;
     }
@@ -2568,6 +2675,10 @@ function sendAction(action, clearSelection = true) {
 function createRoom() {
   const name = playerNameInput.value.trim() || "Jester";
   localStorage.setItem("jg-name", name);
+  if (isOfflineQuickplay()) {
+    window.clearTimeout(botTurnTimer);
+    snapshot = null;
+  }
   sendEvent("createRoom", { name }, (result) => {
     if (!result?.ok) {
       setMenuStatus(result?.message || "Could not create room.");
@@ -2575,6 +2686,7 @@ function createRoom() {
     }
     roomCodeInput.value = result.code;
     window.history.replaceState(null, "", `?room=${result.code}`);
+    startRoomHeartbeat();
     showScreen("game");
   });
 }
@@ -2587,6 +2699,7 @@ function createBotRoom() {
     sendEvent("leaveRoom", { code: snapshot.room.code, seat: mySeat() }, () => {});
   }
   stopPolling();
+  stopRoomHeartbeat();
   snapshot = {
     room: {
       code: "",
@@ -2620,12 +2733,17 @@ function joinRoom() {
     return;
   }
   localStorage.setItem("jg-name", name);
+  if (isOfflineQuickplay()) {
+    window.clearTimeout(botTurnTimer);
+    snapshot = null;
+  }
   sendEvent("joinRoom", { code, name }, (result) => {
     if (!result?.ok) {
       setMenuStatus(result?.message || "Could not join room.");
       return;
     }
     window.history.replaceState(null, "", `?room=${code}`);
+    startRoomHeartbeat();
     showScreen("game");
   });
 }
@@ -2637,6 +2755,8 @@ function leaveRoom() {
   if (code && !isOfflineQuickplay()) {
     sendEvent("leaveRoom", { code, seat }, () => {});
   }
+  stopPolling();
+  stopRoomHeartbeat();
   snapshot = null;
   renderRoomCode = "";
   previousRoomPhase = "";

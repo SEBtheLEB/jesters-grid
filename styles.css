@@ -1501,7 +1501,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   background: radial-gradient(ellipse at center, rgba(0, 0, 0, .5), transparent 68%);
   opacity: .82;
   pointer-events: none;
-  transition: width .2s ease, opacity .2s ease;
+  transition: width .34s cubic-bezier(.18, .88, .22, 1), opacity .28s ease, left .34s cubic-bezier(.18, .88, .22, 1);
 }
 
 .hand-panel.tokens-expanded .hand {
@@ -1574,7 +1574,12 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   user-select: none;
   -webkit-user-drag: none;
   cursor: grab;
-  transition: transform .26s cubic-bezier(.2, .9, .24, 1), left .26s cubic-bezier(.2, .9, .24, 1), box-shadow .18s ease, filter .18s ease, opacity .18s ease;
+  transition:
+    transform .36s cubic-bezier(.18, .88, .22, 1),
+    left .36s cubic-bezier(.18, .88, .22, 1),
+    box-shadow .22s ease,
+    filter .22s ease,
+    opacity .22s ease;
   touch-action: none;
   will-change: transform;
 }
@@ -1584,6 +1589,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   --active-deck-y: var(--deck-open-y, var(--deck-y, 0px));
   --active-deck-rot: var(--deck-open-rot, var(--deck-rot, 0deg));
   --deck-scale: .98;
+  transition-duration: .42s, .42s, .22s, .22s, .22s;
 }
 
 .hand.deck-dragging .hand-card {
@@ -1613,7 +1619,11 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 }
 
 .hand-card.place-ghost {
-  transition: left .28s cubic-bezier(.2, .85, .22, 1), top .28s cubic-bezier(.2, .85, .22, 1), transform .28s ease, opacity .18s ease;
+  transition:
+    left .34s cubic-bezier(.18, .88, .22, 1),
+    top .34s cubic-bezier(.18, .88, .22, 1),
+    transform .34s cubic-bezier(.18, .88, .22, 1),
+    opacity .34s ease;
 }
 
 .hand-card::before {

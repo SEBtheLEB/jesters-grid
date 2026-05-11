@@ -134,12 +134,14 @@ async function handleApiRequest(req, res, url) {
         sendJsonResponse(res, fail("Room not found."));
         return;
       }
-      const seat = claimSeat(room, cleanClientId(body.clientId), body.name);
+      const stableClientId = cleanClientId(body.clientId);
+      const wasDisconnected = room.players.some((player) => player.clientId === stableClientId && !player.connected);
+      const seat = claimSeat(room, stableClientId, body.name);
       if (seat === null) {
         sendJsonResponse(res, fail("Room is full."));
         return;
       }
-      emitRoom(room);
+      if (!body.heartbeat || wasDisconnected) emitRoom(room);
       sendJsonResponse(res, { ok: true, code: room.code, seat, snapshot: snapshotFor(room, seat) });
       return;
     }
@@ -342,7 +344,7 @@ function handleClientMessage(client, raw) {
     client.clientId = stableClientId;
     client.roomCode = code;
     client.seat = 0;
-    reply(client, id, { ok: true, code, seat: 0 });
+    reply(client, id, { ok: true, code, seat: 0, snapshot: snapshotFor(room, 0) });
     emitRoom(room);
     return;
   }
@@ -355,7 +357,7 @@ function handleClientMessage(client, raw) {
     client.clientId = stableClientId;
     client.roomCode = code;
     client.seat = 0;
-    reply(client, id, { ok: true, code, seat: 0 });
+    reply(client, id, { ok: true, code, seat: 0, snapshot: snapshotFor(room, 0) });
     emitRoom(room);
     return;
   }
@@ -368,6 +370,7 @@ function handleClientMessage(client, raw) {
     }
 
     const stableClientId = cleanClientId(payload?.clientId);
+    const wasDisconnected = room.players.some((player) => player.clientId === stableClientId && !player.connected);
     const seat = claimSeat(room, stableClientId, payload?.name);
     if (seat === null) {
       reply(client, id, fail("Room is full."));
@@ -376,39 +379,39 @@ function handleClientMessage(client, raw) {
     client.clientId = stableClientId;
     client.roomCode = room.code;
     client.seat = seat;
-    reply(client, id, { ok: true, code: room.code, seat });
-    emitRoom(room);
+    reply(client, id, { ok: true, code: room.code, seat, snapshot: snapshotFor(room, seat) });
+    if (!payload?.heartbeat || wasDisconnected) emitRoom(room);
     return;
   }
 
   if (event === "gameAction") {
-    const room = rooms.get(client.roomCode || String(payload?.code || "").trim().toUpperCase());
+    const room = getRoomForClientPayload(client, payload);
     if (!room) {
       reply(client, id, fail("Join a room first."));
       return;
     }
 
     const stableClientId = cleanClientId(payload?.clientId || client.clientId);
-    const seat = client.seat ?? resolveSeat(room, stableClientId, payload?.seat);
+    const seat = resolveSeat(room, stableClientId, payload?.seat ?? client.seat);
     if (seat !== null) {
       client.clientId = stableClientId;
       client.roomCode = room.code;
       client.seat = seat;
     }
     const result = performAction(room, seat, payload?.action || payload || {});
-    reply(client, id, result);
     if (result.ok) {
       advanceBotIfNeeded(room);
       emitRoom(room);
     }
+    reply(client, id, { ...result, snapshot: snapshotFor(room, seat) });
     return;
   }
 
   if (event === "dragPreview") {
-    const room = rooms.get(client.roomCode || String(payload?.code || "").trim().toUpperCase());
+    const room = getRoomForClientPayload(client, payload);
     if (!room) return;
     const stableClientId = cleanClientId(payload?.clientId || client.clientId);
-    const seat = client.seat ?? resolveSeat(room, stableClientId, payload?.seat);
+    const seat = resolveSeat(room, stableClientId, payload?.seat ?? client.seat);
     if (seat !== 0 && seat !== 1) return;
     client.clientId = stableClientId;
     client.roomCode = room.code;
@@ -422,9 +425,9 @@ function handleClientMessage(client, raw) {
   }
 
   if (event === "leaveRoom") {
-    const room = rooms.get(client.roomCode || String(payload?.code || "").trim().toUpperCase());
+    const room = getRoomForClientPayload(client, payload);
     if (room) {
-      const seat = client.seat ?? resolveSeat(room, payload?.clientId || client.clientId, payload?.seat);
+      const seat = resolveSeat(room, payload?.clientId || client.clientId, payload?.seat ?? client.seat);
       releaseSeat(room, seat);
       emitRoom(room);
       deleteRoomIfEmpty(room);
@@ -449,6 +452,11 @@ function reply(client, id, result) {
 
 function sendState(client, room) {
   send(client, { type: "state", snapshot: snapshotFor(room, client.seat) });
+}
+
+function getRoomForClientPayload(client, payload) {
+  const requestedCode = String(payload?.code || "").trim().toUpperCase();
+  return (requestedCode && rooms.get(requestedCode)) || (client.roomCode && rooms.get(client.roomCode)) || null;
 }
 
 function encodeFrame(payload) {
