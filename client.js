@@ -108,6 +108,7 @@ let dragCandidate = null;
 let draggedCard = null;
 let tokenDragCandidate = null;
 let draggedToken = null;
+let suppressPieceClickUntil = 0;
 let localMessage = "";
 let renderRoomCode = "";
 let previousHandValues = [];
@@ -467,9 +468,56 @@ function bindHoldInfo(element, getInfo, delay = 560) {
 }
 
 function consumeHeldClick(element) {
+  if (Date.now() < suppressPieceClickUntil) return true;
   if (element.dataset.suppressClick !== "true") return false;
   delete element.dataset.suppressClick;
   return true;
+}
+
+function tapFeedback(element) {
+  element.classList.remove("tap-feedback");
+  void element.offsetWidth;
+  element.classList.add("tap-feedback");
+  window.setTimeout(() => element.classList.remove("tap-feedback"), 280);
+  if (navigator.vibrate) navigator.vibrate(9);
+}
+
+function setInspectOrigin(element, finalWidth) {
+  const rect = element.getBoundingClientRect();
+  const fromX = rect.left + rect.width / 2 - window.innerWidth / 2;
+  const fromY = rect.top + rect.height / 2 - window.innerHeight * 0.45;
+  const scale = Math.max(0.2, Math.min(0.8, rect.width / finalWidth));
+  document.documentElement.style.setProperty("--inspect-from-x", `${fromX}px`);
+  document.documentElement.style.setProperty("--inspect-from-y", `${fromY}px`);
+  document.documentElement.style.setProperty("--inspect-from-scale", scale.toFixed(3));
+}
+
+function inspectCardFromElement(card, index, value) {
+  setInspectOrigin(card, Math.min(window.innerWidth * 0.82, 315));
+  suppressPieceClickUntil = Date.now() + 520;
+  inspectedCardIndex = index;
+  inspectedTokenId = null;
+  selectedCardIndex = null;
+  selectedToken = null;
+  heldCardIndex = null;
+  heldTokenId = null;
+  showingTokens = false;
+  localMessage = `${CARD_NAMES[value]} revealed.`;
+  render();
+}
+
+function inspectTokenFromElement(button, token) {
+  setInspectOrigin(button, Math.min(window.innerWidth * 0.76, 292));
+  suppressPieceClickUntil = Date.now() + 520;
+  inspectedTokenId = token.id;
+  inspectedCardIndex = null;
+  selectedCardIndex = null;
+  selectedToken = null;
+  heldCardIndex = null;
+  heldTokenId = null;
+  deckExpanded = false;
+  localMessage = `${token.label} revealed.`;
+  render();
 }
 
 function getDeckLayout(index) {
@@ -648,6 +696,7 @@ function clearTokenDrag() {
 
 function startCardDrag(candidate, event) {
   if (!deckExpanded || !candidate || draggedCard || inspectOverlay.classList.contains("show")) return;
+  if (candidate.isUnavailable) return;
   if (inspectedCardIndex !== null || inspectedTokenId !== null) return;
   if (candidate.card.dataset.suppressClick === "true") return;
 
@@ -755,12 +804,13 @@ function endCardDragFromPointer(event, cancelled = false) {
 function bindCardDrag(card, index, value, isUnavailable) {
   card.addEventListener("pointerdown", (event) => {
     if (event.button && event.button !== 0) return;
-    if (isUnavailable || !deckExpanded) return;
+    if (!deckExpanded || !isMyTurn()) return;
     if (inspectedCardIndex !== null || inspectedTokenId !== null) return;
     dragCandidate = {
       card,
       index,
       value,
+      isUnavailable,
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
@@ -769,18 +819,9 @@ function bindCardDrag(card, index, value, isUnavailable) {
     };
     dragCandidate.holdTimer = window.setTimeout(() => {
       if (!dragCandidate || dragCandidate.card !== card || dragCandidate.pointerId !== event.pointerId) return;
-      inspectedCardIndex = null;
-      inspectedTokenId = null;
-      heldCardIndex = index;
-      heldTokenId = null;
-      selectedCardIndex = index;
-      selectedToken = null;
       card.dataset.suppressClick = "true";
-      card.classList.add("held-card");
-      handEl.classList.add("deck-holding");
-      updateBoardDragTargets(value);
-      localMessage = `${CARD_NAMES[value]} readied. Tap a tile or drag it onto the board.`;
-      messageEl.textContent = localMessage;
+      dragCandidate = null;
+      inspectCardFromElement(card, index, value);
     }, 330);
     try {
       card.setPointerCapture(event.pointerId);
@@ -836,6 +877,7 @@ function animateTokenToTile(tokenId, tileIndex) {
 
 function startTokenDrag(candidate, event) {
   if (!showingTokens || !candidate || draggedToken || inspectOverlay.classList.contains("show")) return;
+  if (candidate.isUnavailable) return;
   if (inspectedCardIndex !== null || inspectedTokenId !== null) return;
   if (candidate.button.dataset.suppressClick === "true") return;
 
@@ -940,11 +982,12 @@ function endTokenDragFromPointer(event, cancelled = false) {
 function bindTokenDrag(button, token, isUnavailable) {
   button.addEventListener("pointerdown", (event) => {
     if (event.button && event.button !== 0) return;
-    if (isUnavailable || !showingTokens) return;
+    if (!showingTokens || !isMyTurn()) return;
     if (inspectedCardIndex !== null || inspectedTokenId !== null) return;
     tokenDragCandidate = {
       button,
       id: token.id,
+      isUnavailable,
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
@@ -953,18 +996,9 @@ function bindTokenDrag(button, token, isUnavailable) {
     };
     tokenDragCandidate.holdTimer = window.setTimeout(() => {
       if (!tokenDragCandidate || tokenDragCandidate.button !== button || tokenDragCandidate.pointerId !== event.pointerId) return;
-      inspectedCardIndex = null;
-      inspectedTokenId = null;
-      heldCardIndex = null;
-      heldTokenId = token.id;
-      selectedCardIndex = null;
-      selectedToken = token.id;
       button.dataset.suppressClick = "true";
-      button.classList.add("held-token");
-      tokensEl.classList.add("token-holding");
-      updateTokenDragTargets();
-      localMessage = `${token.label} readied. Tap a tile or drag it onto the board.`;
-      messageEl.textContent = localMessage;
+      tokenDragCandidate = null;
+      inspectTokenFromElement(button, token);
     }, 330);
     try {
       button.setPointerCapture(event.pointerId);
@@ -1119,7 +1153,7 @@ function renderStatus() {
   tokenLimit.textContent = `${game.tokensUsed}/2`;
   cancelBtn.textContent = game.pendingShot ? "Skip" : "Cancel";
   messageEl.textContent = localMessage || game.lastMessage || "Make your move.";
-  document.getElementById("endTurnBtn").disabled = !isMyTurn();
+  document.getElementById("endTurnBtn").disabled = !isMyTurn() || !game.cardPlacedThisTurn;
   cancelBtn.disabled = !isMyTurn();
 }
 
@@ -1220,7 +1254,7 @@ function renderHand() {
     const isUnavailable = !isMyTurn() || (game.cardPlacedThisTurn && !game.extraCardPlacement) || !!game.pendingShot || game.pendingWitchTile !== null;
     card.classList.toggle("is-disabled", isUnavailable);
     card.setAttribute("aria-disabled", String(isUnavailable));
-    card.setAttribute("aria-label", `${CARD_NAMES[value]}, ${value}. ${deckExpanded ? "Tap to inspect. Hold to ready or drag." : "Tap to open the deck."}`);
+    card.setAttribute("aria-label", `${CARD_NAMES[value]}, ${value}. ${deckExpanded ? "Tap to select. Hold to inspect, or drag onto the board." : "Tap to open the deck."}`);
     card.innerHTML = `
       <div class="power-badge">${value}</div>
       <div class="suit-badge">JG</div>
@@ -1245,17 +1279,32 @@ function renderHand() {
         heldTokenId = null;
         selectedCardIndex = null;
         selectedToken = null;
-        setLocalMessage("Deck opened. Tap a card to inspect it, or hold to ready it.");
+        setLocalMessage("Deck opened. Tap a card to select it, hold to inspect it, or drag it.");
         return;
       }
-      selectedCardIndex = null;
+      if (inspectedCardIndex === index) {
+        inspectedCardIndex = null;
+        setLocalMessage("Card tucked back into the deck.");
+        return;
+      }
+      if (isUnavailable) {
+        setLocalMessage(game.cardPlacedThisTurn && !game.extraCardPlacement ? "You already placed a card this turn." : "That card is not playable right now.");
+        tapFeedback(card);
+        return;
+      }
+      selectedCardIndex = index;
       selectedToken = null;
       heldCardIndex = null;
       heldTokenId = null;
       showingTokens = false;
       inspectedTokenId = null;
-      inspectedCardIndex = inspectedCardIndex === index ? null : index;
-      setLocalMessage(inspectedCardIndex === index ? `${CARD_NAMES[value]} revealed.` : "Card tucked back into the deck.");
+      inspectedCardIndex = null;
+      localMessage = `${CARD_NAMES[value]} selected. Tap a tile to place it.`;
+      render();
+      window.requestAnimationFrame(() => {
+        const selected = handEl.querySelector(`[data-hand-index="${index}"]`);
+        if (selected) tapFeedback(selected);
+      });
     });
     handEl.appendChild(card);
   });
@@ -1313,17 +1362,32 @@ function renderTokens() {
         showingTokens = true;
         deckExpanded = false;
         clearHandFocus();
-        setLocalMessage("Tokens opened. Tap one to inspect it, or hold to ready it.");
+        setLocalMessage("Tokens opened. Tap a token to select it, or hold to inspect it.");
+        return;
+      }
+      if (inspectedTokenId === token.id) {
+        inspectedTokenId = null;
+        setLocalMessage("Token tucked back into the pile.");
+        return;
+      }
+      if (isUnavailable) {
+        setLocalMessage(available <= 0 ? "You do not have that token." : "That token is not playable right now.");
+        tapFeedback(button);
         return;
       }
       selectedCardIndex = null;
-      selectedToken = null;
+      selectedToken = token.id;
       heldCardIndex = null;
       heldTokenId = null;
       deckExpanded = false;
       inspectedCardIndex = null;
-      inspectedTokenId = inspectedTokenId === token.id ? null : token.id;
-      setLocalMessage(inspectedTokenId === token.id ? `${token.label} revealed.` : "Token tucked back into the pile.");
+      inspectedTokenId = null;
+      localMessage = `${token.label} selected. Tap a tile to use it.`;
+      render();
+      window.requestAnimationFrame(() => {
+        const selected = tokensEl.querySelector(`[data-token-id="${token.id}"]`);
+        if (selected) tapFeedback(selected);
+      });
     });
     tokensEl.appendChild(button);
   });
@@ -1561,7 +1625,7 @@ handEl.addEventListener("click", (event) => {
   deckExpanded = true;
   showingTokens = false;
   clearHandFocus();
-  setLocalMessage("Deck opened. Tap a card to inspect it, or hold to ready it.");
+  setLocalMessage("Deck opened. Tap a card to select it, hold to inspect it, or drag it.");
 });
 window.addEventListener("click", (event) => {
   const target = event.target;
@@ -1592,7 +1656,7 @@ tokenPanelBtn.addEventListener("click", (event) => {
   showingTokens = !showingTokens;
   deckExpanded = false;
   clearHandFocus();
-  setLocalMessage(showingTokens ? "Tokens opened. Tap one to inspect it, or hold to ready it." : "Tokens tucked.");
+  setLocalMessage(showingTokens ? "Tokens opened. Tap a token to select it, or hold to inspect it." : "Tokens tucked.");
 });
 inspectClose.addEventListener("click", closeInspect);
 inspectOverlay.addEventListener("click", (event) => {
