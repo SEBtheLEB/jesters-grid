@@ -58,7 +58,7 @@ const CARD_DETAILS = {
   3: "Shield cannot be covered, swept, or shot unless Armor Pierce is involved.",
   4: "Archer is a diagonal shooter. Use Ammo Crate on it to shoot along diagonal lines.",
   5: "Crossbow is a straight shooter. Use Ammo Crate on it to shoot along rows and columns.",
-  6: "Witch can stun a tile, stopping play and shots on that tile until cleared.",
+  6: "Witch stuns the tile she is placed on, then forces you to choose one different tile to stun.",
   7: "A strong court card for covering lower cards and building toward four in a row.",
   8: "A strong court card for covering lower cards and controlling the grid.",
   9: "A strong court card for covering lower cards and blocking opponent lines.",
@@ -157,6 +157,8 @@ let deckMotionTimer = null;
 let inspectReturnTimer = null;
 let pendingBoardCutscene = null;
 let boardCutsceneQueue = Promise.resolve();
+let boardCutsceneActive = false;
+let boardCutsceneMessage = "";
 
 const DECK_CARD_LAYOUTS = [
   { x: -46, y: -22, r: -8, openX: -90, openY: -42, openR: -9, z: 2 },
@@ -551,7 +553,7 @@ function isPlayer() {
 
 function isMyTurn() {
   const game = currentGame();
-  return isPlayer() && game.current === mySeat() && !game.gameOver;
+  return isPlayer() && game.current === mySeat() && !game.gameOver && !boardCutsceneActive;
 }
 
 function myPlayer() {
@@ -584,7 +586,7 @@ function getCardHint(value) {
   if (value === 3) return "Cannot cover.";
   if (value === 4) return "Shoots diagonal.";
   if (value === 5) return "Shoots straight.";
-  if (value === 6) return "Stuns tile.";
+  if (value === 6) return "Stuns 2 tiles.";
   if (value === 14) return "Locks tile.";
   return "Place or cover.";
 }
@@ -842,11 +844,96 @@ function waitForCutscene(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+function setBoardCutsceneActive(active, message = "") {
+  boardCutsceneActive = active;
+  boardCutsceneMessage = message;
+  gameShell.classList.toggle("board-cutscene-active", active);
+  if (messageEl && currentGame()) {
+    renderStatus();
+  }
+}
+
+function setBoardCutsceneMessage(message) {
+  boardCutsceneMessage = message;
+  if (messageEl) messageEl.textContent = message || localMessage || currentGame()?.lastMessage || "Make your move.";
+}
+
 function tileCenter(index) {
   const tile = boardEl.querySelector(`[data-tile-index="${index}"]`);
   if (!tile) return null;
   const rect = tile.getBoundingClientRect();
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, rect, tile };
+}
+
+function boardCardHtml(card) {
+  return `
+    <div class="power-badge">${card?.value ?? ""}</div>
+    <div class="suit-badge">JG</div>
+    <div class="card-art"></div>
+    <div class="card-name">${CARD_NAMES[card?.value] || "Card"}</div>
+  `;
+}
+
+function cardTravelStart(owner) {
+  const isMine = owner - 1 === mySeat();
+  const source = isMine ? handEl : document.querySelector(".opponent-panel");
+  const rect = source?.getBoundingClientRect();
+  if (rect) {
+    return {
+      x: rect.left + rect.width / 2,
+      y: isMine ? rect.top + rect.height * 0.5 : rect.bottom - 8,
+      rotation: isMine ? 7 : -7
+    };
+  }
+  return {
+    x: window.innerWidth / 2,
+    y: isMine ? window.innerHeight - 84 : 84,
+    rotation: isMine ? 7 : -7
+  };
+}
+
+async function playPlacementVfx(event) {
+  const target = tileCenter(event.tile);
+  if (!target || !event.card) return;
+
+  const finalCard = target.tile.querySelector(".card");
+  const player = currentGame()?.players?.[event.card.owner - 1];
+  const playerName = player?.name || `Player ${event.card.owner}`;
+  setBoardCutsceneMessage(`${playerName} places ${event.card.value} - ${CARD_NAMES[event.card.value]}.`);
+
+  if (event.card.owner - 1 === mySeat()) {
+    pulseTile(event.tile, "placement-impact", 420);
+    await waitForCutscene(250);
+    return;
+  }
+
+  finalCard?.classList.add("cutscene-card-pending");
+  const start = cardTravelStart(event.card.owner);
+  const ghost = document.createElement("div");
+  ghost.className = `card cutscene-placement-card p${event.card.owner}-card`;
+  ghost.style.left = `${start.x}px`;
+  ghost.style.top = `${start.y}px`;
+  ghost.style.width = `${Math.max(44, target.rect.width * 0.78)}px`;
+  ghost.style.height = `${Math.max(52, target.rect.height * 0.84)}px`;
+  ghost.style.setProperty("--travel-rot", `${start.rotation}deg`);
+  ghost.innerHTML = boardCardHtml(event.card);
+  document.body.appendChild(ghost);
+
+  await waitForCutscene(40);
+  ghost.classList.add("in-flight");
+  ghost.style.left = `${target.x}px`;
+  ghost.style.top = `${target.y}px`;
+  ghost.style.transform = "translate(-50%, -50%) rotate(0deg) scale(1)";
+  await waitForCutscene(560);
+  pulseTile(event.tile, "placement-impact", 480);
+  finalCard?.classList.remove("cutscene-card-pending");
+  finalCard?.classList.add("cutscene-card-reveal");
+  ghost.classList.add("landed");
+  window.setTimeout(() => {
+    ghost.remove();
+    finalCard?.classList.remove("cutscene-card-reveal");
+  }, 260);
+  await waitForCutscene(220);
 }
 
 function pulseTile(index, className, duration = 520) {
@@ -867,12 +954,7 @@ function spawnRemovedCardEcho(index, card) {
   echo.style.top = `${center.y}px`;
   echo.style.width = `${Math.max(44, center.rect.width * 0.78)}px`;
   echo.style.height = `${Math.max(52, center.rect.height * 0.84)}px`;
-  echo.innerHTML = `
-    <div class="power-badge">${card.value}</div>
-    <div class="suit-badge">JG</div>
-    <div class="card-art"></div>
-    <div class="card-name">${CARD_NAMES[card.value]}</div>
-  `;
+  echo.innerHTML = boardCardHtml(card);
   document.body.appendChild(echo);
   window.setTimeout(() => echo.classList.add("hit"), 360);
   window.setTimeout(() => echo.remove(), 860);
@@ -923,11 +1005,38 @@ function stunLevelFromGame(game, index) {
   return tile ? Math.max(tile.stunTurns || 0, card?.stunned ? 1 : 0) : 0;
 }
 
+function isLikelyShotLine(fromIndex, toIndex, value) {
+  const fromRow = Math.floor(fromIndex / 4);
+  const fromCol = fromIndex % 4;
+  const toRow = Math.floor(toIndex / 4);
+  const toCol = toIndex % 4;
+  const rowDelta = Math.abs(toRow - fromRow);
+  const colDelta = Math.abs(toCol - fromCol);
+  if (value === 4) return rowDelta === colDelta && rowDelta > 0;
+  if (value === 5) return (rowDelta === 0 && colDelta > 0) || (colDelta === 0 && rowDelta > 0);
+  return false;
+}
+
 function detectBoardCutscenes(previousSnapshot, nextSnapshot) {
   const previousGame = previousSnapshot?.game;
   const nextGame = nextSnapshot?.game;
   if (!previousGame || !nextGame || nextSnapshot?.room?.phase !== "playing") return [];
   const events = [];
+  const placements = [];
+
+  for (let index = 0; index < 16; index += 1) {
+    const before = previousGame.board[index];
+    const after = nextGame.board[index];
+    if (!before || !after) continue;
+    if (after.stack.length === before.stack.length + 1) {
+      const placed = topCard(after);
+      if (placed) {
+        const event = { type: "place-card", tile: index, card: { ...placed } };
+        placements.push(event);
+        events.push(event);
+      }
+    }
+  }
 
   if (!previousGame.pendingShot && nextGame.pendingShot?.fromIndex !== undefined) {
     events.push({ type: "shooter-ready", from: nextGame.pendingShot.fromIndex });
@@ -941,8 +1050,30 @@ function detectBoardCutscenes(previousSnapshot, nextSnapshot) {
       return before && after && before.stack.length > after.stack.length;
     }) ?? (shot.targets || []).find((index) => topKeyFromGame(previousGame, index) !== topKeyFromGame(nextGame, index));
     if (Number.isInteger(targetIndex) && /shot landed|parry|shot was dodged/i.test(nextGame.lastMessage || "")) {
-      events.push({ type: "shot", from: shot.fromIndex, to: targetIndex, removedCard: topCard(previousGame.board[targetIndex]) });
+      const before = previousGame.board[targetIndex];
+      const after = nextGame.board[targetIndex];
+      const removedCard = before && after && before.stack.length > after.stack.length ? topCard(before) : null;
+      events.push({ type: "shot", from: shot.fromIndex, to: targetIndex, removedCard });
     }
+  }
+
+  if (!previousGame.pendingShot) {
+    const removedTargets = [];
+    for (let index = 0; index < 16; index += 1) {
+      const before = previousGame.board[index];
+      const after = nextGame.board[index];
+      if (before && after && before.stack.length > after.stack.length) {
+        removedTargets.push({ index, removedCard: topCard(before) });
+      }
+    }
+    placements.forEach((placement) => {
+      if (![4, 5].includes(placement.card.value)) return;
+      const target = removedTargets.find((item) => isLikelyShotLine(placement.tile, item.index, placement.card.value));
+      if (target) {
+        events.push({ type: "shooter-ready", from: placement.tile });
+        events.push({ type: "shot", from: placement.tile, to: target.index, removedCard: target.removedCard });
+      }
+    });
   }
 
   for (let index = 0; index < 16; index += 1) {
@@ -955,21 +1086,32 @@ function detectBoardCutscenes(previousSnapshot, nextSnapshot) {
 }
 
 async function playBoardCutscenes(events) {
-  for (const event of events) {
-    if (event.type === "shooter-ready") {
-      pulseTile(event.from, "shooter-cutscene", 560);
-      await waitForCutscene(260);
+  setBoardCutsceneActive(true, "Watching the play resolve...");
+  try {
+    for (const event of events) {
+      if (event.type === "place-card") {
+        await playPlacementVfx(event);
+      }
+      if (event.type === "shooter-ready") {
+        setBoardCutsceneMessage("A shooter readies its line.");
+        pulseTile(event.from, "shooter-cutscene", 620);
+        await waitForCutscene(360);
+      }
+      if (event.type === "shot") {
+        setBoardCutsceneMessage("A shot cuts across the grid.");
+        pulseTile(event.from, "shooter-cutscene", 560);
+        await waitForCutscene(210);
+        fireShotVfx(event.from, event.to, event.removedCard);
+        await waitForCutscene(700);
+      }
+      if (event.type === "witch-stun") {
+        setBoardCutsceneMessage("Witchcraft binds a tile.");
+        stunTileVfx(event.tile);
+        await waitForCutscene(360);
+      }
     }
-    if (event.type === "shot") {
-      pulseTile(event.from, "shooter-cutscene", 520);
-      await waitForCutscene(170);
-      fireShotVfx(event.from, event.to, event.removedCard);
-      await waitForCutscene(620);
-    }
-    if (event.type === "witch-stun") {
-      stunTileVfx(event.tile);
-      await waitForCutscene(210);
-    }
+  } finally {
+    setBoardCutsceneActive(false);
   }
 }
 
@@ -1643,7 +1785,7 @@ function placeCard(game, rawHandIndex, rawTileIndex) {
   if (value === 6) {
     applyStun(game, tileIndex, player.id, 2);
     game.pendingWitchTile = tileIndex;
-    setMessage(game, "Witch placed. Tap one other tile to stun it.");
+    setMessage(game, "Witch placed. Her tile is stunned. Tap a different tile for the second stun.");
   } else if (value === 4 || value === 5) {
     prepareShot(game, tileIndex, false);
   } else {
@@ -1679,6 +1821,7 @@ function resolveWitchStun(game, rawTileIndex) {
   if (game.pendingWitchTile === null) return fail("No Witch stun is pending.");
   const tileIndex = numberInRange(rawTileIndex, 0, 15);
   if (tileIndex === null) return fail("Invalid tile.");
+  if (tileIndex === game.pendingWitchTile) return fail("Choose a different tile for the second Witch stun.");
   applyStun(game, tileIndex, currentPlayer(game).id, 2);
   game.pendingWitchTile = null;
   setMessage(game, "Witch stunned a tile. You may continue.");
@@ -2079,19 +2222,28 @@ function chooseBotWitchTarget(game) {
   const enemyId = botId === 1 ? 2 : 1;
   let best = null;
   let bestScore = -Infinity;
+  let fallback = null;
+  let fallbackScore = -Infinity;
 
   game.board.forEach((tile, index) => {
     if (index === game.pendingWitchTile) return;
     const card = topCard(tile);
-    if (!card || card.owner !== enemyId || card.stunned || tile.stunTurns > 0) return;
-    const score = card.value * 85 + tileLinePressure(game, index, enemyId);
-    if (score > bestScore) {
-      bestScore = score;
-      best = index;
+    const alreadyStunned = tile.stunTurns > 0 || card?.stunned;
+    const fallbackValue = card ? card.value * (card.owner === enemyId ? 16 : 4) + tileLinePressure(game, index, card.owner) : 8;
+    if (!alreadyStunned && fallbackValue > fallbackScore) {
+      fallbackScore = fallbackValue;
+      fallback = index;
+    }
+    if (card && card.owner === enemyId && !alreadyStunned) {
+      const score = card.value * 85 + tileLinePressure(game, index, enemyId);
+      if (score > bestScore) {
+        bestScore = score;
+        best = index;
+      }
     }
   });
 
-  return best;
+  return best ?? fallback ?? game.board.findIndex((_tile, index) => index !== game.pendingWitchTile);
 }
 
 function chooseBotCardMove(game) {
@@ -2448,7 +2600,7 @@ function renderStatus() {
   const current = players[game.current];
 
   document.getElementById("roomCodeDisplay").textContent = isOfflineQuickplay() ? "Offline Bot" : (snapshot.room.mode === "quickplay" ? "Quickplay" : `Room ${snapshot.room.code}`);
-  document.getElementById("seatLabel").textContent = isOfflineQuickplay() ? (isMyTurn() ? "Your Turn" : "Bot Turn") : (seat === null ? "Spectator" : `Player ${seat + 1}`);
+  document.getElementById("seatLabel").textContent = boardCutsceneActive ? "Resolving" : (isOfflineQuickplay() ? (isMyTurn() ? "Your Turn" : "Bot Turn") : (seat === null ? "Spectator" : `Player ${seat + 1}`));
   document.getElementById("onlineStatus").textContent = isOfflineQuickplay() ? "Local" : (socketOpen() || usingHttpFallback ? "Online" : "Offline");
   document.getElementById("opponentName").textContent = top.name || `Player ${topIndex + 1}`;
   document.getElementById("opponentTitle").textContent = top.connected ? (top.rank || `Player ${topIndex + 1}`) : "Disconnected";
@@ -2467,10 +2619,10 @@ function renderStatus() {
     opponentCards.appendChild(card);
   }
 
-  turnLabel.textContent = game.gameOver ? "Game Over" : `${current.name || `Player ${game.current + 1}`} Turn`;
+  turnLabel.textContent = boardCutsceneActive ? "Resolving" : (game.gameOver ? "Game Over" : `${current.name || `Player ${game.current + 1}`} Turn`);
   tokenLimit.textContent = `${game.tokensUsed}/2`;
   cancelBtn.textContent = game.pendingShot ? "Skip" : "Cancel";
-  messageEl.textContent = localMessage || game.lastMessage || "Make your move.";
+  messageEl.textContent = boardCutsceneMessage || localMessage || game.lastMessage || "Make your move.";
   document.getElementById("endTurnBtn").disabled = !isMyTurn() || !game.cardPlacedThisTurn || game.pendingWitchTile !== null;
   cancelBtn.disabled = !isMyTurn() || game.pendingWitchTile !== null;
 }
@@ -2786,9 +2938,9 @@ function onTileClick(index) {
     return;
   }
   if (inspectedCardIndex !== null || inspectedTokenId !== null) {
-    inspectedCardIndex = null;
+    if (inspectedCardIndex !== null) closeInspectedCardAnimated();
     inspectedTokenId = null;
-    render();
+    if (inspectedCardIndex === null) render();
     return;
   }
   if (game.pendingWitchTile !== null) {
@@ -2831,6 +2983,10 @@ function onTileClick(index) {
 }
 
 function sendAction(action, clearSelection = true, recoveryAttempt = 0) {
+  if (boardCutsceneActive && action.type !== "restart") {
+    setLocalMessageInline("Let the play resolve first.");
+    return;
+  }
   if (isOfflineQuickplay()) {
     const previousSnapshot = structuredClone(snapshot);
     const result = performOfflineAction(action);

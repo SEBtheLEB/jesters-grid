@@ -878,7 +878,7 @@ function placeCard(game, rawHandIndex, rawTileIndex) {
   if (value === 6) {
     applyStun(game, tileIndex, player.id, 2);
     game.pendingWitchTile = tileIndex;
-    setMessage(game, "Witch placed. Tap one other tile to stun it.");
+    setMessage(game, "Witch placed. Her tile is stunned. Tap a different tile for the second stun.");
   } else if (value === 4 || value === 5) {
     prepareShot(game, tileIndex, false);
   } else {
@@ -914,6 +914,7 @@ function resolveWitchStun(game, rawTileIndex) {
   if (game.pendingWitchTile === null) return fail("No Witch stun is pending.");
   const tileIndex = numberInRange(rawTileIndex, 0, 15);
   if (tileIndex === null) return fail("Invalid tile.");
+  if (tileIndex === game.pendingWitchTile) return fail("Choose a different tile for the second Witch stun.");
   applyStun(game, tileIndex, currentPlayer(game).id, 2);
   game.pendingWitchTile = null;
   setMessage(game, "Witch stunned a tile. You may continue.");
@@ -1306,19 +1307,28 @@ function chooseBotWitchTarget(game) {
   const enemyId = botId === 1 ? 2 : 1;
   let best = null;
   let bestScore = -Infinity;
+  let fallback = null;
+  let fallbackScore = -Infinity;
 
   game.board.forEach((tile, index) => {
     if (index === game.pendingWitchTile) return;
     const card = topCard(tile);
-    if (!card || card.owner !== enemyId || card.stunned || tile.stunTurns > 0) return;
-    const score = card.value * 85 + tileLinePressure(game, index, enemyId);
-    if (score > bestScore) {
-      bestScore = score;
-      best = index;
+    const alreadyStunned = tile.stunTurns > 0 || card?.stunned;
+    const fallbackValue = card ? card.value * (card.owner === enemyId ? 16 : 4) + tileLinePressure(game, index, card.owner) : 8;
+    if (!alreadyStunned && fallbackValue > fallbackScore) {
+      fallbackScore = fallbackValue;
+      fallback = index;
+    }
+    if (card && card.owner === enemyId && !alreadyStunned) {
+      const score = card.value * 85 + tileLinePressure(game, index, enemyId);
+      if (score > bestScore) {
+        bestScore = score;
+        best = index;
+      }
     }
   });
 
-  return best;
+  return best ?? fallback ?? game.board.findIndex((_tile, index) => index !== game.pendingWitchTile);
 }
 
 function chooseBotCardMove(game) {
