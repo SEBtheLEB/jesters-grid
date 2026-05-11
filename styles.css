@@ -88,7 +88,7 @@ button:disabled {
   filter: grayscale(.2);
 }
 
-button:active:not(:disabled) {
+button:active:not(:disabled):not(.hand-card):not(.token-button) {
   transform: translateY(1px) scale(.992);
 }
 
@@ -386,6 +386,11 @@ button:active:not(:disabled) {
   filter: blur(4px) brightness(.72);
   transform: scale(1.01);
   transition: filter .28s ease, transform .28s ease;
+}
+
+.game-shell.inspecting-piece .board-frame {
+  filter: blur(2px) brightness(.58);
+  transition: filter .18s ease;
 }
 
 .top-hud {
@@ -1184,16 +1189,15 @@ button:active:not(:disabled) {
 .hand-stage {
   min-width: 0;
   min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 70px;
-  align-items: stretch;
-  gap: 4px;
+  position: relative;
+  display: block;
   overflow: visible;
 }
 
 .hand-scroll {
   min-width: 0;
   min-height: 0;
+  height: 100%;
   position: relative;
   overflow: visible;
 }
@@ -1377,14 +1381,23 @@ button:active:not(:disabled) {
 }
 
 .hand-card.inspected {
-  --card-lift: -18px;
-  --deck-scale: 1.08;
-  z-index: 30;
+  position: fixed;
+  left: 50%;
+  top: 45%;
+  width: min(82vw, 315px);
+  height: min(52svh, 430px);
+  max-height: min(52svh, 430px);
+  z-index: 230;
+  grid-template-rows: minmax(112px, 1fr) auto minmax(126px, auto);
+  padding: 13px 12px 12px;
+  transform: translate(-50%, -50%) rotate(0deg) scale(1) !important;
+  transform-origin: 50% 50%;
   filter: brightness(1.04);
+  cursor: pointer;
   box-shadow:
     inset 0 0 0 2px var(--gold),
     0 0 24px rgba(247, 217, 135, .5),
-    0 16px 24px rgba(0, 0, 0, .5);
+    0 24px 42px rgba(0, 0, 0, .66);
 }
 
 .hand-card.is-disabled,
@@ -1429,8 +1442,8 @@ button:active:not(:disabled) {
 }
 
 .hand-card.inspected .hand-art {
-  min-height: 26px;
-  margin-top: 17px;
+  min-height: 112px;
+  margin-top: 30px;
 }
 
 .hand-name {
@@ -1455,32 +1468,52 @@ button:active:not(:disabled) {
 }
 
 .hand-card.inspected .hand-rules {
-  max-height: 58px;
+  max-height: 150px;
   color: #3c260f;
-  font-size: clamp(6.6px, 1.75vw, 7.6px);
-  line-height: 1.08;
+  font-size: clamp(12px, 3.25vw, 14px);
+  line-height: 1.18;
+  text-align: left;
+}
+
+.hand-card.inspected .hand-name {
+  font-size: clamp(16px, 4.4vw, 20px);
+  line-height: 1.05;
+}
+
+.hand-card.inspected .power-badge {
+  min-width: 38px;
+  height: 38px;
+  font-size: 22px;
+}
+
+.hand-card.inspected .suit-badge {
+  font-size: 12px;
 }
 
 .token-dock {
-  position: relative;
-  min-width: 0;
-  min-height: 0;
+  position: absolute;
+  right: 6px;
+  bottom: 4px;
+  z-index: 70;
+  width: 62px;
+  height: 72px;
   overflow: visible;
+  pointer-events: none;
 }
 
 .token-toggle {
   position: relative;
   z-index: 16;
-  width: 50px;
-  min-width: 50px;
-  height: 50px;
-  min-height: 50px;
-  align-self: end;
-  justify-self: center;
+  width: 46px;
+  min-width: 46px;
+  height: 46px;
+  min-height: 46px;
+  margin: 22px 0 0 12px;
   display: grid;
   place-items: center;
   padding: 0;
   border-radius: 50%;
+  pointer-events: auto;
   background:
     radial-gradient(circle at 38% 22%, rgba(255, 241, 200, .22), transparent 20%),
     linear-gradient(180deg, #89562c, #462315 58%, #21100a);
@@ -1508,14 +1541,6 @@ button:active:not(:disabled) {
     linear-gradient(45deg, transparent 44%, rgba(127, 85, 32, .45) 44% 56%, transparent 56%),
     radial-gradient(circle at 50% 35%, #fff0b6, var(--gold) 58%, var(--gold-3));
   box-shadow: 0 2px 5px rgba(0, 0, 0, .36);
-}
-
-.token-toggle[aria-pressed="true"] .pouch-ornament::before {
-  content: "X";
-  color: #2a1607;
-  font-family: "Trebuchet MS", Arial, sans-serif;
-  font-size: 14px;
-  font-weight: 900;
 }
 
 .pouch-title {
@@ -1559,7 +1584,7 @@ button:active:not(:disabled) {
 .tokens {
   position: absolute;
   inset: 0;
-  z-index: 12;
+  z-index: 20;
   display: block;
   overflow: visible;
   scrollbar-width: none;
@@ -1572,14 +1597,15 @@ button:active:not(:disabled) {
 }
 
 .token-button {
+  --token-scale: .72;
   position: absolute;
   left: 50%;
-  bottom: 4px;
+  bottom: 11px;
   z-index: var(--token-z, 1);
-  width: 44px;
-  min-width: 44px;
-  height: 44px;
-  min-height: 44px;
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  min-height: 42px;
   display: grid;
   place-items: center;
   padding: 0;
@@ -1603,19 +1629,31 @@ button:active:not(:disabled) {
       calc(-50% + var(--token-x, 0px)),
       var(--token-y, 0px)
     )
-    scale(.72);
+    scale(var(--token-scale));
   pointer-events: auto;
-  touch-action: manipulation;
+  touch-action: none;
   transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
 }
 
 .tokens.token-expanded .token-button {
+  --token-scale: 1;
   transform:
     translate(
       calc(-50% + var(--token-open-x, 0px)),
       var(--token-open-y, 0px)
     )
-    scale(1);
+    scale(var(--token-scale));
+}
+
+.tokens.token-dragging .token-button,
+.tokens.token-holding .token-button {
+  --token-scale: .82;
+  filter: saturate(.62) brightness(.44);
+}
+
+.tokens.token-dragging .token-button.drag-source,
+.tokens.token-holding .token-button.held-token {
+  filter: none;
 }
 
 .token-button .token-icon {
@@ -1632,11 +1670,16 @@ button:active:not(:disabled) {
 }
 
 .token-button .token-name,
-.token-button .token-count {
+.token-button .token-count,
+.token-button .token-detail {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.token-button .token-detail {
+  display: none;
 }
 
 .token-button .token-name {
@@ -1670,8 +1713,101 @@ button:active:not(:disabled) {
     0 0 18px rgba(247, 217, 135, .4);
 }
 
+.token-button.held-token {
+  filter: brightness(1.14);
+  box-shadow:
+    inset 0 0 0 2px #fff0b6,
+    0 0 21px rgba(247, 217, 135, .46);
+}
+
 .token-button.selected .token-name {
   opacity: 1;
+}
+
+.token-button.inspected {
+  position: fixed;
+  left: 50%;
+  top: 45%;
+  z-index: 235;
+  width: min(76vw, 292px);
+  height: min(36svh, 304px);
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  align-content: start;
+  justify-items: center;
+  gap: 10px;
+  padding: 18px 16px 16px;
+  border-radius: 12px;
+  transform: translate(-50%, -50%) scale(1) !important;
+  filter: brightness(1.06);
+  background:
+    radial-gradient(circle at 50% 12%, rgba(247, 217, 135, .18), transparent 38%),
+    linear-gradient(180deg, #472c60, #171020);
+  box-shadow:
+    inset 0 0 0 2px var(--gold),
+    0 0 24px rgba(247, 217, 135, .42),
+    0 24px 42px rgba(0, 0, 0, .66);
+}
+
+.token-button.inspected .token-icon {
+  width: 68px;
+  height: 68px;
+  font-size: 34px;
+}
+
+.token-button.inspected .token-name {
+  position: static;
+  width: auto;
+  max-width: 100%;
+  opacity: 1;
+  transform: none;
+  color: var(--gold);
+  font-size: 15px;
+  line-height: 1.1;
+  white-space: normal;
+}
+
+.token-button.inspected .token-count {
+  top: 12px;
+  right: 12px;
+  min-width: 30px;
+  padding: 3px 6px;
+  font-size: 10px;
+}
+
+.token-button.inspected .token-detail {
+  display: block;
+  max-width: 100%;
+  color: var(--ivory);
+  font-family: "Trebuchet MS", Arial, sans-serif;
+  font-size: clamp(12px, 3.2vw, 14px);
+  font-weight: 800;
+  line-height: 1.22;
+  text-align: center;
+  white-space: normal;
+}
+
+.token-button.drag-source {
+  visibility: hidden;
+  opacity: 0;
+}
+
+.token-button.drag-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 500;
+  pointer-events: none;
+  opacity: .98;
+  filter: drop-shadow(0 17px 24px rgba(0, 0, 0, .48)) brightness(1.08);
+  transform: translate(-50%, -50%) scale(1.12) !important;
+  transition: none;
+}
+
+.token-button.place-ghost {
+  transition: left .28s cubic-bezier(.2, .85, .22, 1), top .28s cubic-bezier(.2, .85, .22, 1), transform .28s ease, opacity .22s ease;
 }
 
 .token-button.token-enter {
