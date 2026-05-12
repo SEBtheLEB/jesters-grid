@@ -556,11 +556,11 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   min-height: 0;
   display: grid;
   grid-template-rows:
-    clamp(132px, 18.7svh, 170px)
-    clamp(38px, 5.8svh, 54px)
+    auto
+    auto
     minmax(0, 1fr)
-    clamp(152px, 22.5svh, 210px)
-    clamp(38px, 5.5svh, 50px);
+    clamp(142px, 21svh, 194px)
+    clamp(38px, 5.2svh, 48px);
   gap: var(--gap);
 }
 
@@ -583,16 +583,16 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto 1fr;
-  gap: 5px;
+  grid-template-rows: auto auto auto;
+  gap: clamp(3px, .75svh, 5px);
 }
 
 .match-header {
-  min-height: clamp(48px, 7.2vh, 64px);
+  min-height: clamp(40px, 6.1svh, 56px);
   display: grid;
-  grid-template-columns: clamp(52px, 13vw, 62px) minmax(0, 1fr) clamp(52px, 13vw, 62px);
+  grid-template-columns: clamp(46px, 12vw, 58px) minmax(0, 1fr) clamp(46px, 12vw, 58px);
   align-items: center;
-  gap: 8px;
+  gap: clamp(5px, 1.6vw, 8px);
 }
 
 .rules-header {
@@ -605,7 +605,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   display: grid;
   place-items: center;
   position: relative;
-  padding: 0 12px;
+  padding: 0 clamp(8px, 2.2vw, 12px);
   border: 2px solid rgba(241, 201, 121, .86);
   border-radius: 7px;
   background:
@@ -641,7 +641,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 .match-title {
   min-width: 0;
   color: #f5d58e;
-  font-size: clamp(26px, 7.8vw, 38px);
+  font-size: clamp(21px, 6.4vw, 32px);
   font-weight: 900;
   line-height: 1;
   text-align: center;
@@ -656,8 +656,8 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 
 .icon-medallion,
 .settings-button {
-  width: clamp(52px, 13vw, 62px);
-  height: clamp(44px, 6.8vh, 58px);
+  width: clamp(46px, 12vw, 58px);
+  height: clamp(38px, 5.9svh, 52px);
   display: grid;
   place-items: center;
   color: var(--gold);
@@ -671,7 +671,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
     inset 0 0 0 1px rgba(255, 231, 162, .14),
     inset 0 0 16px rgba(0, 0, 0, .46),
     0 6px 13px rgba(0, 0, 0, .42);
-  font-size: clamp(10px, 2.8vw, 13px);
+  font-size: clamp(8px, 2.35vw, 12px);
   font-weight: 900;
   letter-spacing: .05em;
   text-transform: uppercase;
@@ -2704,6 +2704,133 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
     linear-gradient(180deg, #173052, #07111d 62%, #02050b);
 }
 
+/* Mobile portrait scaling guardrails: keep ornate chrome from overlapping play areas. */
+.room-strip {
+  min-height: clamp(24px, 3.6svh, 28px);
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, .86fr) minmax(0, .76fr);
+  gap: clamp(3px, 1.2vw, 6px);
+  padding: 4px clamp(8px, 2.4vw, 12px);
+  font-size: clamp(9px, 2.55vw, 12px);
+  letter-spacing: .055em;
+}
+
+.room-strip span:nth-child(2)::before,
+.room-strip span:nth-child(2)::after,
+.section-label span:first-child::before,
+.section-label span:first-child::after,
+#turnLabel::after {
+  content: "";
+  margin: 0;
+}
+
+.duelist-bar {
+  min-height: clamp(52px, 7.8svh, 64px);
+  gap: clamp(4px, 1.4vw, 7px);
+}
+
+.opponent-panel,
+.player-panel {
+  min-height: clamp(52px, 7.8svh, 64px);
+  grid-template-columns: clamp(28px, 7.8vw, 35px) minmax(0, 1fr);
+  gap: clamp(4px, 1.25vw, 6px);
+  padding: clamp(4px, 1svh, 7px) clamp(5px, 1.4vw, 7px);
+}
+
+.opponent-panel {
+  grid-template-columns: clamp(28px, 7.8vw, 35px) minmax(0, 1fr);
+}
+
+.avatar-frame {
+  width: clamp(27px, 7.6vw, 34px);
+  height: clamp(27px, 7.6vw, 34px);
+  font-size: clamp(7px, 2.05vw, 10px);
+}
+
+.identity-name {
+  font-size: clamp(10.5px, 2.85vw, 15px);
+  letter-spacing: 0;
+}
+
+.identity-title {
+  font-size: clamp(6.2px, 1.75vw, 8.5px);
+  letter-spacing: .035em;
+}
+
+.stat-line,
+.player-meters {
+  margin-top: clamp(1px, .45svh, 3px);
+  gap: clamp(2px, .85vw, 4px);
+  font-size: clamp(7.2px, 2vw, 9.5px);
+  letter-spacing: 0;
+}
+
+.resource-chip {
+  position: absolute;
+  right: 6px;
+  top: 5px;
+  align-self: start;
+  width: auto;
+  min-width: 34px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  font-size: clamp(6px, 1.75vw, 8px);
+}
+
+.message-bar {
+  min-height: clamp(30px, 4.05svh, 36px);
+  max-height: none;
+  padding: 4px clamp(18px, 5.6vw, 30px);
+  font-size: clamp(11px, 2.85vw, 14px);
+  line-height: 1.04;
+}
+
+.message-bar::before,
+.message-bar::after {
+  width: 12px;
+  height: calc(100% - 8px);
+  min-height: 20px;
+  max-height: 28px;
+}
+
+.message-bar::before {
+  left: 2px;
+}
+
+.message-bar::after {
+  right: 2px;
+}
+
+.section-label {
+  min-height: 20px;
+  font-size: clamp(10px, 2.8vw, 13px);
+  letter-spacing: .07em;
+}
+
+.hand-panel {
+  grid-template-rows: 21px minmax(0, 1fr);
+}
+
+.hand-card {
+  top: 41%;
+  width: clamp(80px, 23vw, 102px);
+  height: clamp(108px, 16svh, 134px);
+}
+
+.token-dock {
+  bottom: 8px;
+}
+
+.player-actions {
+  min-height: clamp(34px, 4.8svh, 42px);
+  gap: clamp(5px, 1.6vw, 8px);
+}
+
+.action-button {
+  font-size: clamp(13px, 3.8vw, 19px);
+  letter-spacing: .055em;
+}
+
 .waiting-room {
   width: 100%;
   height: 100%;
@@ -3129,10 +3256,10 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 
   .game-shell {
     grid-template-rows:
-      clamp(120px, 17svh, 144px)
-      clamp(31px, 5svh, 40px)
+      auto
+      auto
       minmax(0, 1fr)
-      clamp(144px, 22.5svh, 190px)
+      clamp(136px, 21.5svh, 184px)
       clamp(32px, 5svh, 40px);
     gap: 5px;
   }
@@ -3170,11 +3297,11 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   .opponent-panel,
   .player-panel {
     grid-template-columns: 29px minmax(0, 1fr);
-    padding: 6px;
+    padding: 5px;
   }
 
   .opponent-panel {
-    grid-template-columns: 29px minmax(0, 1fr) 34px;
+    grid-template-columns: 29px minmax(0, 1fr);
   }
 
   .avatar-frame {
@@ -3184,8 +3311,8 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   }
 
   .resource-chip {
-    width: 34px;
-    min-width: 34px;
+    width: auto;
+    min-width: 30px;
     font-size: 6.5px;
   }
 
@@ -3202,10 +3329,10 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 @media (max-height: 790px) {
   .game-shell {
     grid-template-rows:
-      clamp(112px, 17svh, 128px)
-      clamp(30px, 4.8svh, 38px)
+      auto
+      auto
       minmax(0, 1fr)
-      clamp(134px, 21svh, 166px)
+      clamp(120px, 19.6svh, 154px)
       clamp(31px, 4.8svh, 38px);
     gap: 5px;
   }
@@ -3220,12 +3347,12 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   }
 
   .duelist-bar {
-    min-height: 56px;
+    min-height: 50px;
   }
 
   .opponent-panel,
   .player-panel {
-    min-height: 56px;
+    min-height: 50px;
   }
 
   .board {
@@ -3240,7 +3367,18 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   }
 
   .hand-card {
-    min-height: 102px;
+    top: 38.5%;
+    height: clamp(102px, 15.4svh, 124px);
+    min-height: 0;
+  }
+
+  .player-actions {
+    min-height: 32px;
+  }
+
+  .action-button {
+    min-height: 26px;
+    font-size: clamp(12px, 3.45vw, 16px);
   }
 
   .hand-art {

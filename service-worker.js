@@ -1,4 +1,4 @@
-const CACHE_NAME = "jesters-grid-pwa-v17";
+const CACHE_NAME = "jesters-grid-pwa-v18";
 const APP_ASSETS = [
   "/",
   "/index.html",
