@@ -77,6 +77,11 @@ function handleHttpRequest(req, res) {
     return;
   }
 
+  if (url.pathname.startsWith("/assets/skins/")) {
+    serveSkinAsset(res, url.pathname);
+    return;
+  }
+
   const files = {
     "/": ["index.html", "text/html; charset=utf-8"],
     "/index.html": ["index.html", "text/html; charset=utf-8"],
@@ -88,6 +93,30 @@ function handleHttpRequest(req, res) {
   };
   const match = files[url.pathname] || files["/"];
   serveFile(res, path.join(__dirname, match[0]), match[1]);
+}
+
+function serveSkinAsset(res, pathname) {
+  const relative = pathname.replace(/^\/assets\/skins\//, "");
+  const normalized = path.normalize(relative);
+  if (normalized.startsWith("..") || path.isAbsolute(normalized)) {
+    sendJsonResponse(res, fail("Asset not found."), 404);
+    return;
+  }
+  const ext = path.extname(normalized).toLowerCase();
+  const contentTypes = {
+    ".css": "text/css; charset=utf-8",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".svg": "image/svg+xml; charset=utf-8"
+  };
+  const contentType = contentTypes[ext];
+  if (!contentType) {
+    sendJsonResponse(res, fail("Asset not found."), 404);
+    return;
+  }
+  serveFile(res, path.join(__dirname, "assets", "skins", normalized), contentType);
 }
 
 async function handleApiRequest(req, res, url) {

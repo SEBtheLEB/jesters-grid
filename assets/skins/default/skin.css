@@ -1,0 +1,44 @@
+:root {
+  /*
+    Drop replacement PNGs into this folder, then change any variable below.
+    Keep values as url("/assets/skins/default/your-file.png").
+    The base CSS always provides painted fallbacks, so every variable is optional.
+  */
+  --skin-phone-bg: none;
+  --skin-menu-bg: none;
+  --skin-title-frame: none;
+  --skin-hud-strip: none;
+  --skin-panel-frame: none;
+  --skin-message-scroll: none;
+  --skin-board-frame: none;
+  --skin-board-corners: none;
+  --skin-tile-empty: none;
+  --skin-tile-symbol: none;
+  --skin-card-frame: none;
+  --skin-card-art-default: none;
+  --skin-card-art-1: var(--skin-card-art-default);
+  --skin-card-art-2: var(--skin-card-art-default);
+  --skin-card-art-3: var(--skin-card-art-default);
+  --skin-card-art-4: var(--skin-card-art-default);
+  --skin-card-art-5: var(--skin-card-art-default);
+  --skin-card-art-6: var(--skin-card-art-default);
+  --skin-card-art-7: var(--skin-card-art-default);
+  --skin-card-art-8: var(--skin-card-art-default);
+  --skin-card-art-9: var(--skin-card-art-default);
+  --skin-card-art-10: var(--skin-card-art-default);
+  --skin-card-art-11: var(--skin-card-art-default);
+  --skin-card-art-12: var(--skin-card-art-default);
+  --skin-card-art-13: var(--skin-card-art-default);
+  --skin-card-art-14: var(--skin-card-art-default);
+  --skin-token-bard: none;
+  --skin-token-ammo: none;
+  --skin-token-pierce: none;
+  --skin-token-potion: none;
+  --skin-token-parry: none;
+  --skin-button-red: none;
+  --skin-button-blue: none;
+  --skin-button-small: none;
+  --skin-avatar-p1: none;
+  --skin-avatar-p2: none;
+  --skin-companion: none;
+}

@@ -910,7 +910,7 @@ async function playPlacementVfx(event) {
   finalCard?.classList.add("cutscene-card-pending");
   const start = cardTravelStart(event.card.owner);
   const ghost = document.createElement("div");
-  ghost.className = `card cutscene-placement-card p${event.card.owner}-card`;
+  ghost.className = `card cutscene-placement-card p${event.card.owner}-card card-v${event.card.value}`;
   ghost.style.left = `${start.x}px`;
   ghost.style.top = `${start.y}px`;
   ghost.style.width = `${Math.max(44, target.rect.width * 0.78)}px`;
@@ -949,7 +949,7 @@ function spawnRemovedCardEcho(index, card) {
   const center = tileCenter(index);
   if (!center || !card) return null;
   const echo = document.createElement("div");
-  echo.className = `card cutscene-removed-card p${card.owner}-card`;
+  echo.className = `card cutscene-removed-card p${card.owner}-card card-v${card.value}`;
   echo.style.left = `${center.x}px`;
   echo.style.top = `${center.y}px`;
   echo.style.width = `${Math.max(44, center.rect.width * 0.78)}px`;
@@ -2652,7 +2652,7 @@ function renderBoard() {
 
     if (top) {
       const card = document.createElement("div");
-      card.className = `card p${top.owner}-card`;
+      card.className = `card p${top.owner}-card card-v${top.value}`;
       if (top.value === 14 || tile.locked) card.classList.add("locked");
       if (top.stunned || tile.stunTurns > 0) card.classList.add("stunned");
       if (game.pendingShot && game.pendingShot.fromIndex === index) card.classList.add("shooter-ready");
@@ -2712,7 +2712,7 @@ function renderHand() {
 
   player.hand.forEach((value, index) => {
     const card = document.createElement("button");
-    card.className = `hand-card p${player.id}-card`;
+    card.className = `hand-card p${player.id}-card card-v${value}`;
     card.draggable = false;
     card.style.setProperty("--draw-order", index);
     const layout = getDeckLayout(index);
@@ -2792,6 +2792,7 @@ function renderTokens() {
     const layout = getTokenLayout(tokenIndex);
     nextTokenCounts[token.id] = available;
     button.className = "token-button";
+    button.classList.add(`token-${token.id}`);
     button.style.setProperty("--draw-order", tokenIndex);
     button.style.setProperty("--token-x", `${layout.x}px`);
     button.style.setProperty("--token-y", `${layout.y}px`);
