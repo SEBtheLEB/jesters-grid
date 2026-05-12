@@ -48,7 +48,7 @@ const TOKEN_DETAILS = {
   bard: "Place on one of your 1s or 2s to turn it into a shooter. A 1 becomes a diagonal shooter and a 2 becomes a straight shooter.",
   ammo: "Place on one of your shooters to fire a shot. Shooters are 4s, 5s, or cards empowered by Bard.",
   pierce: "Use during a shot to let that shot destroy high cards from 10 through 13.",
-  potion: "Use on a stunned tile to clear it, or use your Witch to stun another tile.",
+  potion: "Use on a stunned tile to clear it, or use your Witch to stun another non-Jester tile.",
   parry: "Place on one of your cards to block the next shot that would destroy it."
 };
 
@@ -58,7 +58,7 @@ const CARD_DETAILS = {
   3: "Shield cannot be covered, swept, or shot unless Armor Pierce is involved.",
   4: "Archer is a diagonal shooter. Use Ammo Crate on it to shoot along diagonal lines.",
   5: "Crossbow is a straight shooter. Use Ammo Crate on it to shoot along rows and columns.",
-  6: "Witch stuns the tile she is placed on, then forces you to choose one different tile to stun.",
+  6: "Witch stuns the tile she is placed on, then forces you to choose one different non-Jester tile to stun.",
   7: "A strong court card for covering lower cards and building toward four in a row.",
   8: "A strong court card for covering lower cards and controlling the grid.",
   9: "A strong court card for covering lower cards and blocking opponent lines.",
@@ -582,6 +582,16 @@ function isShooter(card, tile) {
   return value === 4 || value === 5;
 }
 
+function canStunTile(game, tileIndex, sourceTileIndex = null) {
+  const tile = game.board[tileIndex];
+  if (!tile) return false;
+  if (tileIndex === sourceTileIndex) return false;
+  const card = topCard(tile);
+  if (card?.value === 14) return false;
+  if (tile.stunTurns > 0 || card?.stunned) return false;
+  return true;
+}
+
 function getCardHint(value) {
   if (value === 3) return "Cannot cover.";
   if (value === 4) return "Shoots diagonal.";
@@ -945,6 +955,22 @@ function pulseTile(index, className, duration = 520) {
   window.setTimeout(() => center.tile.classList.remove(className), duration);
 }
 
+function pieceReturnTarget(owner, kind) {
+  const isMine = owner - 1 === mySeat();
+  const source = kind === "token" && isMine ? tokenPanelBtn : (isMine ? handEl : document.querySelector(".opponent-panel"));
+  const rect = source?.getBoundingClientRect();
+  if (rect) {
+    return {
+      x: rect.left + rect.width / 2,
+      y: kind === "token" && isMine ? rect.top + rect.height / 2 : rect.top + rect.height * 0.42
+    };
+  }
+  return {
+    x: window.innerWidth / 2,
+    y: isMine ? window.innerHeight - 80 : 88
+  };
+}
+
 function spawnRemovedCardEcho(index, card) {
   const center = tileCenter(index);
   if (!center || !card) return null;
@@ -956,12 +982,59 @@ function spawnRemovedCardEcho(index, card) {
   echo.style.height = `${Math.max(52, center.rect.height * 0.84)}px`;
   echo.innerHTML = boardCardHtml(card);
   document.body.appendChild(echo);
-  window.setTimeout(() => echo.classList.add("hit"), 360);
-  window.setTimeout(() => echo.remove(), 860);
+  window.setTimeout(() => echo.classList.add("hit"), 420);
+  window.setTimeout(() => echo.remove(), 1120);
   return echo;
 }
 
-function fireShotVfx(fromIndex, toIndex, removedCard = null) {
+function spawnReturningCardEcho(index, card, order = 0) {
+  const center = tileCenter(index);
+  if (!center || !card) return;
+  const target = pieceReturnTarget(card.owner, "card");
+  const echo = document.createElement("div");
+  echo.className = `card cutscene-return-card p${card.owner}-card card-v${card.value}`;
+  echo.style.left = `${center.x}px`;
+  echo.style.top = `${center.y}px`;
+  echo.style.width = `${Math.max(42, center.rect.width * 0.72)}px`;
+  echo.style.height = `${Math.max(50, center.rect.height * 0.78)}px`;
+  echo.innerHTML = boardCardHtml(card);
+  document.body.appendChild(echo);
+  window.setTimeout(() => {
+    echo.classList.add("returning");
+    echo.style.left = `${target.x}px`;
+    echo.style.top = `${target.y}px`;
+  }, 110 + order * 90);
+  window.setTimeout(() => echo.remove(), 1120 + order * 90);
+}
+
+function spawnReturningTokenEcho(index, token, order = 0) {
+  const center = tileCenter(index);
+  if (!center || !token) return;
+  const target = pieceReturnTarget(token.owner, "token");
+  const meta = TOKEN_TYPES.find((item) => item.id === token.type);
+  const echo = document.createElement("div");
+  echo.className = `cutscene-return-token token-${token.type}`;
+  echo.textContent = meta?.icon || "?";
+  echo.style.left = `${center.x}px`;
+  echo.style.top = `${center.y}px`;
+  document.body.appendChild(echo);
+  window.setTimeout(() => {
+    echo.classList.add("returning");
+    echo.style.left = `${target.x}px`;
+    echo.style.top = `${target.y}px`;
+  }, 150 + order * 80);
+  window.setTimeout(() => echo.remove(), 1060 + order * 80);
+}
+
+async function playReturnsVfx(tileIndex, cards = [], tokens = []) {
+  cards.forEach((card, order) => spawnReturningCardEcho(tileIndex, card, order));
+  tokens.forEach((token, order) => spawnReturningTokenEcho(tileIndex, token, cards.length + order));
+  if (cards.length || tokens.length) {
+    await waitForCutscene(980 + (cards.length + tokens.length) * 90);
+  }
+}
+
+function fireShotVfx(fromIndex, toIndex) {
   const from = tileCenter(fromIndex);
   const to = tileCenter(toIndex);
   if (!from || !to) return;
@@ -976,9 +1049,8 @@ function fireShotVfx(fromIndex, toIndex, removedCard = null) {
   shot.style.width = `${distance}px`;
   shot.style.transform = `rotate(${angle}deg)`;
   document.body.appendChild(shot);
-  spawnRemovedCardEcho(toIndex, removedCard);
-  pulseTile(toIndex, "shot-impact", 520);
-  window.setTimeout(() => shot.remove(), 620);
+  pulseTile(toIndex, "shot-impact", 760);
+  window.setTimeout(() => shot.remove(), 840);
 }
 
 function stunTileVfx(index) {
@@ -990,7 +1062,88 @@ function stunTileVfx(index) {
   rune.style.left = `${center.x}px`;
   rune.style.top = `${center.y}px`;
   document.body.appendChild(rune);
-  window.setTimeout(() => rune.remove(), 760);
+  window.setTimeout(() => rune.remove(), 940);
+}
+
+function stunClearVfx(index) {
+  const center = tileCenter(index);
+  if (!center) return;
+  pulseTile(index, "stun-cleared-vfx", 720);
+}
+
+function tokenKey(token) {
+  return String(token?.id ?? `${token?.owner}-${token?.type}`);
+}
+
+async function playTokenAddVfx(event) {
+  const target = tileCenter(event.tile);
+  if (!target || !event.token) return;
+  const meta = TOKEN_TYPES.find((item) => item.id === event.token.type);
+  const start = pieceReturnTarget(event.token.owner, "token");
+  const token = document.createElement("div");
+  token.className = `cutscene-token-vfx token-${event.token.type}`;
+  token.textContent = meta?.icon || "?";
+  token.style.left = `${start.x}px`;
+  token.style.top = `${start.y}px`;
+  document.body.appendChild(token);
+  setBoardCutsceneMessage(`${meta?.label || "Token"} moves onto the board.`);
+  await waitForCutscene(60);
+  token.classList.add("in-flight");
+  token.style.left = `${target.x}px`;
+  token.style.top = `${target.y}px`;
+  await waitForCutscene(520);
+  pulseTile(event.tile, "placement-impact", 560);
+  token.classList.add("landed");
+  window.setTimeout(() => token.remove(), 320);
+  await waitForCutscene(260);
+}
+
+async function playSweepVfx(event) {
+  const target = tileCenter(event.tile);
+  if (!target || !event.card) return;
+  const player = currentGame()?.players?.[event.card.owner - 1];
+  const playerName = player?.name || `Player ${event.card.owner}`;
+  setBoardCutsceneMessage(`${playerName} sweeps ${CARD_NAMES[event.card.value]} across the tile.`);
+
+  const start = cardTravelStart(event.card.owner);
+  const ghost = document.createElement("div");
+  ghost.className = `card cutscene-placement-card p${event.card.owner}-card card-v${event.card.value}`;
+  ghost.style.left = `${start.x}px`;
+  ghost.style.top = `${start.y}px`;
+  ghost.style.width = `${Math.max(44, target.rect.width * 0.78)}px`;
+  ghost.style.height = `${Math.max(52, target.rect.height * 0.84)}px`;
+  ghost.style.setProperty("--travel-rot", `${start.rotation}deg`);
+  ghost.innerHTML = boardCardHtml(event.card);
+  document.body.appendChild(ghost);
+
+  await waitForCutscene(70);
+  ghost.classList.add("in-flight");
+  ghost.style.left = `${target.x}px`;
+  ghost.style.top = `${target.y}px`;
+  ghost.style.transform = "translate(-50%, -50%) rotate(0deg) scale(1)";
+  await waitForCutscene(700);
+  pulseTile(event.tile, "sweep-impact", 860);
+  ghost.classList.add("landed");
+  window.setTimeout(() => ghost.remove(), 280);
+  await waitForCutscene(260);
+  setBoardCutsceneMessage("Swept cards and tokens return to their owners.");
+  await playReturnsVfx(event.tile, event.returnedCards || [], event.returnedTokens || []);
+}
+
+async function playShotVfx(event) {
+  setBoardCutsceneMessage(event.parried ? "Parry catches the shot." : "A shot cuts across the grid.");
+  pulseTile(event.from, "shooter-cutscene", 720);
+  await waitForCutscene(280);
+  fireShotVfx(event.from, event.to);
+  await waitForCutscene(520);
+  if (event.parried) {
+    pulseTile(event.to, "parry-cutscene", 760);
+    await waitForCutscene(620);
+    return;
+  }
+  if (event.removedCard) spawnRemovedCardEcho(event.to, event.removedCard);
+  await waitForCutscene(520);
+  await playReturnsVfx(event.to, event.removedCard ? [event.removedCard] : [], event.returnedTokens || []);
 }
 
 function topKeyFromGame(game, index) {
@@ -1023,6 +1176,8 @@ function detectBoardCutscenes(previousSnapshot, nextSnapshot) {
   if (!previousGame || !nextGame || nextSnapshot?.room?.phase !== "playing") return [];
   const events = [];
   const placements = [];
+  const tokenAdditions = [];
+  const sweepTiles = new Set();
 
   for (let index = 0; index < 16; index += 1) {
     const before = previousGame.board[index];
@@ -1036,7 +1191,36 @@ function detectBoardCutscenes(previousSnapshot, nextSnapshot) {
         events.push(event);
       }
     }
+
+    const beforeTokenKeys = new Set(before.tokens.map(tokenKey));
+    after.tokens.forEach((token) => {
+      if (!beforeTokenKeys.has(tokenKey(token))) {
+        tokenAdditions.push({ type: "token-add", tile: index, token: { ...token } });
+      }
+    });
   }
+
+  if (!previousGame.pendingShot && /sweep/i.test(nextGame.lastMessage || "")) {
+    for (let index = 0; index < 16; index += 1) {
+      const before = previousGame.board[index];
+      const after = nextGame.board[index];
+      if (!before || !after || before.stack.length === 0 || after.stack.length !== 0) continue;
+      const sweptTop = topCard(before);
+      if (!sweptTop) continue;
+      const owner = previousGame.players?.[previousGame.current]?.id || previousGame.current + 1;
+      const event = {
+        type: "sweep",
+        tile: index,
+        card: { owner, value: sweptTop.value },
+        returnedCards: [...before.stack.map((card) => ({ ...card })), { owner, value: sweptTop.value }],
+        returnedTokens: before.tokens.map((token) => ({ ...token }))
+      };
+      sweepTiles.add(index);
+      events.push(event);
+    }
+  }
+
+  tokenAdditions.forEach((event) => events.push(event));
 
   if (!previousGame.pendingShot && nextGame.pendingShot?.fromIndex !== undefined) {
     events.push({ type: "shooter-ready", from: nextGame.pendingShot.fromIndex });
@@ -1053,32 +1237,76 @@ function detectBoardCutscenes(previousSnapshot, nextSnapshot) {
       const before = previousGame.board[targetIndex];
       const after = nextGame.board[targetIndex];
       const removedCard = before && after && before.stack.length > after.stack.length ? topCard(before) : null;
-      events.push({ type: "shot", from: shot.fromIndex, to: targetIndex, removedCard });
+      const returnedTokens = removedCard ? before.tokens.map((token) => ({ ...token })) : [];
+      events.push({
+        type: "shot",
+        from: shot.fromIndex,
+        to: targetIndex,
+        removedCard,
+        returnedTokens,
+        parried: /parry|dodged/i.test(nextGame.lastMessage || "")
+      });
     }
   }
 
   if (!previousGame.pendingShot) {
     const removedTargets = [];
+    const scriptedShots = new Set();
     for (let index = 0; index < 16; index += 1) {
       const before = previousGame.board[index];
       const after = nextGame.board[index];
+      if (sweepTiles.has(index)) continue;
       if (before && after && before.stack.length > after.stack.length) {
-        removedTargets.push({ index, removedCard: topCard(before) });
+        removedTargets.push({
+          index,
+          removedCard: topCard(before),
+          returnedTokens: before.tokens.map((token) => ({ ...token }))
+        });
       }
     }
     placements.forEach((placement) => {
       if (![4, 5].includes(placement.card.value)) return;
       const target = removedTargets.find((item) => isLikelyShotLine(placement.tile, item.index, placement.card.value));
       if (target) {
+        const shotKey = `${placement.tile}-${target.index}`;
+        if (scriptedShots.has(shotKey)) return;
+        scriptedShots.add(shotKey);
         events.push({ type: "shooter-ready", from: placement.tile });
-        events.push({ type: "shot", from: placement.tile, to: target.index, removedCard: target.removedCard });
+        events.push({
+          type: "shot",
+          from: placement.tile,
+          to: target.index,
+          removedCard: target.removedCard,
+          returnedTokens: target.returnedTokens
+        });
       }
+    });
+    tokenAdditions.forEach((tokenEvent) => {
+      const tile = nextGame.board[tokenEvent.tile];
+      const card = topCard(tile);
+      if (!card || !isShooter(card, tile)) return;
+      const value = effectiveValue(card, tile);
+      const target = removedTargets.find((item) => isLikelyShotLine(tokenEvent.tile, item.index, value));
+      if (!target) return;
+      const shotKey = `${tokenEvent.tile}-${target.index}`;
+      if (scriptedShots.has(shotKey)) return;
+      scriptedShots.add(shotKey);
+      events.push({ type: "shooter-ready", from: tokenEvent.tile });
+      events.push({
+        type: "shot",
+        from: tokenEvent.tile,
+        to: target.index,
+        removedCard: target.removedCard,
+        returnedTokens: target.returnedTokens
+      });
     });
   }
 
   for (let index = 0; index < 16; index += 1) {
     if (stunLevelFromGame(previousGame, index) <= 0 && stunLevelFromGame(nextGame, index) > 0) {
       events.push({ type: "witch-stun", tile: index });
+    } else if (stunLevelFromGame(previousGame, index) > 0 && stunLevelFromGame(nextGame, index) <= 0) {
+      events.push({ type: "stun-clear", tile: index });
     }
   }
 
@@ -1092,22 +1320,29 @@ async function playBoardCutscenes(events) {
       if (event.type === "place-card") {
         await playPlacementVfx(event);
       }
+      if (event.type === "sweep") {
+        await playSweepVfx(event);
+      }
+      if (event.type === "token-add") {
+        await playTokenAddVfx(event);
+      }
       if (event.type === "shooter-ready") {
         setBoardCutsceneMessage("A shooter readies its line.");
-        pulseTile(event.from, "shooter-cutscene", 620);
-        await waitForCutscene(360);
+        pulseTile(event.from, "shooter-cutscene", 720);
+        await waitForCutscene(520);
       }
       if (event.type === "shot") {
-        setBoardCutsceneMessage("A shot cuts across the grid.");
-        pulseTile(event.from, "shooter-cutscene", 560);
-        await waitForCutscene(210);
-        fireShotVfx(event.from, event.to, event.removedCard);
-        await waitForCutscene(700);
+        await playShotVfx(event);
       }
       if (event.type === "witch-stun") {
         setBoardCutsceneMessage("Witchcraft binds a tile.");
         stunTileVfx(event.tile);
-        await waitForCutscene(360);
+        await waitForCutscene(760);
+      }
+      if (event.type === "stun-clear") {
+        setBoardCutsceneMessage("Curious Potion breaks the stun.");
+        stunClearVfx(event.tile);
+        await waitForCutscene(640);
       }
     }
   } finally {
@@ -1149,7 +1384,7 @@ function isSelectableTile(index) {
   const game = currentGame();
   const player = myPlayer();
   if (!game || !player || !isMyTurn()) return false;
-  if (game.pendingWitchTile !== null) return true;
+  if (game.pendingWitchTile !== null) return canStunTile(game, index, game.pendingWitchTile);
   if (game.pendingShot) return false;
   if (selectedToken) return true;
   if (selectedCardIndex === null) return false;
@@ -1784,8 +2019,12 @@ function placeCard(game, rawHandIndex, rawTileIndex) {
 
   if (value === 6) {
     applyStun(game, tileIndex, player.id, 2);
-    game.pendingWitchTile = tileIndex;
-    setMessage(game, "Witch placed. Her tile is stunned. Tap a different tile for the second stun.");
+    if (game.board.some((_tile, index) => canStunTile(game, index, tileIndex))) {
+      game.pendingWitchTile = tileIndex;
+      setMessage(game, "Witch placed. Her tile is stunned. Tap a non-Jester tile for the second stun.");
+    } else {
+      setMessage(game, "Witch placed. No other non-Jester tile can be stunned.");
+    }
   } else if (value === 4 || value === 5) {
     prepareShot(game, tileIndex, false);
   } else {
@@ -1822,6 +2061,10 @@ function resolveWitchStun(game, rawTileIndex) {
   const tileIndex = numberInRange(rawTileIndex, 0, 15);
   if (tileIndex === null) return fail("Invalid tile.");
   if (tileIndex === game.pendingWitchTile) return fail("Choose a different tile for the second Witch stun.");
+  if (!canStunTile(game, tileIndex, game.pendingWitchTile)) {
+    const card = topCard(game.board[tileIndex]);
+    return fail(card?.value === 14 ? "The Jester cannot be stunned." : "That tile cannot be stunned.");
+  }
   applyStun(game, tileIndex, currentPlayer(game).id, 2);
   game.pendingWitchTile = null;
   setMessage(game, "Witch stunned a tile. You may continue.");
@@ -1882,8 +2125,12 @@ function useTokenOnTile(game, type, rawTileIndex) {
     }
     if (card && card.owner === player.id && card.value === 6) {
       addToken(game, type, tileIndex);
-      game.pendingWitchTile = tileIndex;
-      setMessage(game, "Curious Potion awakened the Witch. Tap any tile to stun it.");
+      if (game.board.some((_tile, index) => canStunTile(game, index, tileIndex))) {
+        game.pendingWitchTile = tileIndex;
+        setMessage(game, "Curious Potion awakened the Witch. Tap a non-Jester tile to stun it.");
+      } else {
+        setMessage(game, "Curious Potion awakened the Witch, but no non-Jester tile can be stunned.");
+      }
       return ok();
     }
     return fail("Curious Potion can remove stun or activate your Witch.");
@@ -2193,7 +2440,10 @@ function resolveBotPending(game) {
   if (game.pendingWitchTile !== null) {
     const target = chooseBotWitchTarget(game);
     if (target !== null) resolveWitchStun(game, target);
-    else cancelSelection(game);
+    else {
+      game.pendingWitchTile = null;
+      setMessage(game, `${BOT_NAME} found no non-Jester tile to stun.`);
+    }
     return true;
   }
 
@@ -2208,7 +2458,7 @@ function chooseBotShotTarget(game) {
   targets.forEach((index) => {
     const card = topCard(game.board[index]);
     if (!card) return;
-    const score = card.value * 90 + tileLinePressure(game, index, card.owner) + (card.protected ? -160 : 0);
+    const score = card.value * 90 + tileLinePressure(game, index, card.owner) + (card.protected ? -900 : 0);
     if (score > bestScore) {
       bestScore = score;
       best = index;
@@ -2222,28 +2472,54 @@ function chooseBotWitchTarget(game) {
   const enemyId = botId === 1 ? 2 : 1;
   let best = null;
   let bestScore = -Infinity;
-  let fallback = null;
-  let fallbackScore = -Infinity;
 
   game.board.forEach((tile, index) => {
-    if (index === game.pendingWitchTile) return;
-    const card = topCard(tile);
-    const alreadyStunned = tile.stunTurns > 0 || card?.stunned;
-    const fallbackValue = card ? card.value * (card.owner === enemyId ? 16 : 4) + tileLinePressure(game, index, card.owner) : 8;
-    if (!alreadyStunned && fallbackValue > fallbackScore) {
-      fallbackScore = fallbackValue;
-      fallback = index;
-    }
-    if (card && card.owner === enemyId && !alreadyStunned) {
-      const score = card.value * 85 + tileLinePressure(game, index, enemyId);
-      if (score > bestScore) {
-        bestScore = score;
-        best = index;
-      }
+    const score = botStunTargetScore(game, index, botId, enemyId, game.pendingWitchTile);
+    if (score > bestScore) {
+      bestScore = score;
+      best = index;
     }
   });
 
-  return best ?? fallback ?? game.board.findIndex((_tile, index) => index !== game.pendingWitchTile);
+  return bestScore > -Infinity ? best : null;
+}
+
+function bestBotStunTargetScore(game, sourceTileIndex, botId) {
+  const enemyId = botId === 1 ? 2 : 1;
+  return game.board.reduce((best, _tile, index) => {
+    const score = botStunTargetScore(game, index, botId, enemyId, sourceTileIndex);
+    return Math.max(best, score);
+  }, -Infinity);
+}
+
+function botStunTargetScore(game, index, botId, enemyId, sourceTileIndex = null) {
+  if (!canStunTile(game, index, sourceTileIndex)) return -Infinity;
+
+  const tile = game.board[index];
+  const card = topCard(tile);
+  const enemyThreats = getThreatTilesForOwner(game, enemyId);
+  const botThreats = getThreatTilesForOwner(game, botId);
+  let score = 0;
+
+  if (enemyThreats.has(index)) score += 1800;
+  if (botThreats.has(index)) score -= 220;
+  if ([5, 6, 9, 10].includes(index)) score += 42;
+  if ([0, 3, 12, 15].includes(index)) score += 18;
+
+  if (!card) return score + (enemyThreats.has(index) ? 460 : 18);
+
+  if (card.owner === enemyId) {
+    score += card.value * 70 + tileLinePressure(game, index, enemyId);
+    if (isShooter(card, tile)) score += 520;
+    if (card.value >= 10) score += 180;
+    if (card.protected) score -= 70;
+    return score;
+  }
+
+  score -= 380;
+  score += Math.max(0, 14 - card.value) * 6;
+  if (card.value <= 2) score += 80;
+  return score;
 }
 
 function chooseBotCardMove(game) {
@@ -2295,7 +2571,10 @@ function scoreBotCardMove(game, handIndex, tileIndex, blockThreats) {
   if ([0, 3, 12, 15].includes(tileIndex)) score += 36;
   if (value === 14) score += 460;
   if (value === 3) score += 230;
-  if (value === 6) score += 180 + bestEnemyTileValue(game) * 12;
+  if (value === 6) {
+    const stunScore = bestBotStunTargetScore(game, tileIndex, player.id);
+    score += stunScore > -Infinity ? 160 + Math.min(stunScore, 2200) : -5000;
+  }
   if (value === 4 || value === 5) score += 120 + botShooterPotential(game, tileIndex, value, player.id);
 
   WIN_LINES.forEach((line) => {
@@ -2356,14 +2635,6 @@ function tileLinePressure(game, tileIndex, ownerId) {
     else if (owned === 2) score += 170;
   });
   return score;
-}
-
-function bestEnemyTileValue(game) {
-  const botId = currentPlayer(game).id;
-  return game.board.reduce((best, tile) => {
-    const card = topCard(tile);
-    return card && card.owner !== botId ? Math.max(best, card.value) : best;
-  }, 0);
 }
 
 function botShooterPotential(game, tileIndex, value, ownerId, pierce = false) {
@@ -2926,7 +3197,7 @@ function explainToken(id) {
     bard: "Bard: tap one of your 1s or 2s to enhance it into a shooter.",
     ammo: "Ammo Crate: tap one of your 4s, 5s, or Bard-enhanced cards to shoot.",
     pierce: "Armor Pierce: use during a shot if you want to destroy a card 10-13.",
-    potion: "Curious Potion: tap a stunned tile, or your Witch to stun another tile.",
+    potion: "Curious Potion: tap a stunned tile, or your Witch to stun another non-Jester tile.",
     parry: "Parry: tap one of your cards to protect it from the next shot."
   };
   localMessage = lines[id] || "";
@@ -2945,6 +3216,11 @@ function onTileClick(index) {
     return;
   }
   if (game.pendingWitchTile !== null) {
+    if (!canStunTile(game, index, game.pendingWitchTile)) {
+      const card = topCard(game.board[index]);
+      setLocalMessage(card?.value === 14 ? "The Jester cannot be stunned." : "That tile cannot be stunned.");
+      return;
+    }
     sendAction({ type: "stunTile", tileIndex: index });
     return;
   }

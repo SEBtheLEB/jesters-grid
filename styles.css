@@ -1247,11 +1247,23 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 }
 
 .tile.shot-impact {
-  animation: shot-impact-flash .52s ease both;
+  animation: shot-impact-flash .72s ease both;
 }
 
 .tile.witch-stun-vfx {
-  animation: witch-tile-pulse .76s ease both;
+  animation: witch-tile-pulse .9s ease both;
+}
+
+.tile.sweep-impact {
+  animation: sweep-impact-flash .9s cubic-bezier(.18, .88, .22, 1) both;
+}
+
+.tile.parry-cutscene {
+  animation: parry-cutscene-flash .82s ease both;
+}
+
+.tile.stun-cleared-vfx {
+  animation: stun-clear-flash .78s ease both;
 }
 
 .shot-vfx {
@@ -1266,7 +1278,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   filter:
     drop-shadow(0 0 8px rgba(247, 217, 135, .9))
     drop-shadow(0 0 16px rgba(117, 179, 255, .46));
-  animation: shot-vfx-flight .58s cubic-bezier(.18, .88, .22, 1) both;
+  animation: shot-vfx-flight .78s cubic-bezier(.18, .88, .22, 1) both;
 }
 
 .shot-vfx::after {
@@ -1286,7 +1298,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   z-index: 410;
   pointer-events: none;
   transform: translate(-50%, -50%) scale(1);
-  animation: removed-card-hold .86s ease both;
+  animation: removed-card-hold 1.04s ease both;
 }
 
 .card.cutscene-removed-card.hit {
@@ -1308,7 +1320,81 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   box-shadow:
     0 0 18px rgba(179, 134, 255, .58),
     inset 0 0 18px rgba(247, 217, 135, .18);
-  animation: stun-rune-bloom .76s cubic-bezier(.18, .88, .22, 1) both;
+  animation: stun-rune-bloom .9s cubic-bezier(.18, .88, .22, 1) both;
+}
+
+.card.cutscene-return-card {
+  position: fixed;
+  z-index: 425;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(1);
+  opacity: .98;
+  filter:
+    drop-shadow(0 14px 18px rgba(0, 0, 0, .52))
+    drop-shadow(0 0 12px rgba(247, 217, 135, .34));
+  transition:
+    left .82s cubic-bezier(.2, .88, .2, 1),
+    top .82s cubic-bezier(.2, .88, .2, 1),
+    transform .82s cubic-bezier(.2, .88, .2, 1),
+    opacity .58s ease,
+    filter .58s ease;
+}
+
+.card.cutscene-return-card.returning {
+  opacity: 0;
+  transform: translate(-50%, -50%) rotate(9deg) scale(.36);
+  filter:
+    drop-shadow(0 8px 10px rgba(0, 0, 0, .36))
+    drop-shadow(0 0 18px rgba(247, 217, 135, .7));
+}
+
+.cutscene-return-token,
+.cutscene-token-vfx {
+  position: fixed;
+  z-index: 426;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(1);
+  border: 2px solid rgba(241, 201, 121, .9);
+  border-radius: 50%;
+  color: var(--gold);
+  background:
+    radial-gradient(circle at 38% 24%, rgba(255, 246, 204, .22), transparent 25%),
+    linear-gradient(180deg, #173257, #030811);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 231, 162, .15),
+    0 10px 18px rgba(0, 0, 0, .5),
+    0 0 16px rgba(247, 217, 135, .36);
+  font-size: 15px;
+  font-weight: 900;
+  transition:
+    left .72s cubic-bezier(.2, .88, .2, 1),
+    top .72s cubic-bezier(.2, .88, .2, 1),
+    transform .72s cubic-bezier(.2, .88, .2, 1),
+    opacity .52s ease;
+}
+
+.cutscene-token-vfx {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(.58);
+}
+
+.cutscene-token-vfx.in-flight {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1.12);
+}
+
+.cutscene-token-vfx.landed {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(.82);
+}
+
+.cutscene-return-token.returning {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(.32);
 }
 
 .tile.stunned .card {
@@ -1636,6 +1722,49 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   100% {
     opacity: 0;
     clip-path: inset(0 0 0 84%);
+  }
+}
+
+@keyframes sweep-impact-flash {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  38% {
+    transform: scale(1.035) rotate(.4deg);
+    filter: brightness(1.38) saturate(1.25);
+    box-shadow:
+      inset 0 0 0 2px rgba(247, 217, 135, .98),
+      0 0 30px rgba(247, 217, 135, .52),
+      0 0 18px rgba(190, 66, 43, .3);
+  }
+}
+
+@keyframes parry-cutscene-flash {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  45% {
+    filter: brightness(1.42) saturate(1.24);
+    box-shadow:
+      inset 0 0 0 2px rgba(129, 212, 255, .92),
+      0 0 26px rgba(129, 212, 255, .5),
+      0 0 18px rgba(247, 217, 135, .24);
+  }
+}
+
+@keyframes stun-clear-flash {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  45% {
+    filter: brightness(1.34) saturate(.8);
+    box-shadow:
+      inset 0 0 0 2px rgba(129, 212, 159, .92),
+      0 0 26px rgba(129, 212, 159, .48);
   }
 }
 

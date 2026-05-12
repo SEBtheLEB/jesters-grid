@@ -860,6 +860,16 @@ function isShooter(card, tile) {
   return value === 4 || value === 5;
 }
 
+function canStunTile(game, tileIndex, sourceTileIndex = null) {
+  const tile = game.board[tileIndex];
+  if (!tile) return false;
+  if (tileIndex === sourceTileIndex) return false;
+  const card = topCard(tile);
+  if (card?.value === 14) return false;
+  if (tile.stunTurns > 0 || card?.stunned) return false;
+  return true;
+}
+
 function canPlaceCard(game, tileIndex, value) {
   const tile = game.board[tileIndex];
   const top = topCard(tile);
@@ -906,8 +916,12 @@ function placeCard(game, rawHandIndex, rawTileIndex) {
 
   if (value === 6) {
     applyStun(game, tileIndex, player.id, 2);
-    game.pendingWitchTile = tileIndex;
-    setMessage(game, "Witch placed. Her tile is stunned. Tap a different tile for the second stun.");
+    if (game.board.some((_tile, index) => canStunTile(game, index, tileIndex))) {
+      game.pendingWitchTile = tileIndex;
+      setMessage(game, "Witch placed. Her tile is stunned. Tap a non-Jester tile for the second stun.");
+    } else {
+      setMessage(game, "Witch placed. No other non-Jester tile can be stunned.");
+    }
   } else if (value === 4 || value === 5) {
     prepareShot(game, tileIndex, false);
   } else {
@@ -944,6 +958,10 @@ function resolveWitchStun(game, rawTileIndex) {
   const tileIndex = numberInRange(rawTileIndex, 0, 15);
   if (tileIndex === null) return fail("Invalid tile.");
   if (tileIndex === game.pendingWitchTile) return fail("Choose a different tile for the second Witch stun.");
+  if (!canStunTile(game, tileIndex, game.pendingWitchTile)) {
+    const card = topCard(game.board[tileIndex]);
+    return fail(card?.value === 14 ? "The Jester cannot be stunned." : "That tile cannot be stunned.");
+  }
   applyStun(game, tileIndex, currentPlayer(game).id, 2);
   game.pendingWitchTile = null;
   setMessage(game, "Witch stunned a tile. You may continue.");
@@ -1004,8 +1022,12 @@ function useTokenOnTile(game, type, rawTileIndex) {
     }
     if (card && card.owner === player.id && card.value === 6) {
       addToken(game, type, tileIndex);
-      game.pendingWitchTile = tileIndex;
-      setMessage(game, "Curious Potion awakened the Witch. Tap any tile to stun it.");
+      if (game.board.some((_tile, index) => canStunTile(game, index, tileIndex))) {
+        game.pendingWitchTile = tileIndex;
+        setMessage(game, "Curious Potion awakened the Witch. Tap a non-Jester tile to stun it.");
+      } else {
+        setMessage(game, "Curious Potion awakened the Witch, but no non-Jester tile can be stunned.");
+      }
       return ok();
     }
     return fail("Curious Potion can remove stun or activate your Witch.");
@@ -1307,7 +1329,10 @@ function resolveBotPending(game) {
   if (game.pendingWitchTile !== null) {
     const target = chooseBotWitchTarget(game);
     if (target !== null) resolveWitchStun(game, target);
-    else cancelSelection(game);
+    else {
+      game.pendingWitchTile = null;
+      setMessage(game, `${BOT_NAME} found no non-Jester tile to stun.`);
+    }
     return true;
   }
 
@@ -1322,7 +1347,7 @@ function chooseBotShotTarget(game) {
   targets.forEach((index) => {
     const card = topCard(game.board[index]);
     if (!card) return;
-    const score = card.value * 90 + tileLinePressure(game, index, card.owner) + (card.protected ? -160 : 0);
+    const score = card.value * 90 + tileLinePressure(game, index, card.owner) + (card.protected ? -900 : 0);
     if (score > bestScore) {
       bestScore = score;
       best = index;
@@ -1336,28 +1361,54 @@ function chooseBotWitchTarget(game) {
   const enemyId = botId === 1 ? 2 : 1;
   let best = null;
   let bestScore = -Infinity;
-  let fallback = null;
-  let fallbackScore = -Infinity;
 
   game.board.forEach((tile, index) => {
-    if (index === game.pendingWitchTile) return;
-    const card = topCard(tile);
-    const alreadyStunned = tile.stunTurns > 0 || card?.stunned;
-    const fallbackValue = card ? card.value * (card.owner === enemyId ? 16 : 4) + tileLinePressure(game, index, card.owner) : 8;
-    if (!alreadyStunned && fallbackValue > fallbackScore) {
-      fallbackScore = fallbackValue;
-      fallback = index;
-    }
-    if (card && card.owner === enemyId && !alreadyStunned) {
-      const score = card.value * 85 + tileLinePressure(game, index, enemyId);
-      if (score > bestScore) {
-        bestScore = score;
-        best = index;
-      }
+    const score = botStunTargetScore(game, index, botId, enemyId, game.pendingWitchTile);
+    if (score > bestScore) {
+      bestScore = score;
+      best = index;
     }
   });
 
-  return best ?? fallback ?? game.board.findIndex((_tile, index) => index !== game.pendingWitchTile);
+  return bestScore > -Infinity ? best : null;
+}
+
+function bestBotStunTargetScore(game, sourceTileIndex, botId) {
+  const enemyId = botId === 1 ? 2 : 1;
+  return game.board.reduce((best, _tile, index) => {
+    const score = botStunTargetScore(game, index, botId, enemyId, sourceTileIndex);
+    return Math.max(best, score);
+  }, -Infinity);
+}
+
+function botStunTargetScore(game, index, botId, enemyId, sourceTileIndex = null) {
+  if (!canStunTile(game, index, sourceTileIndex)) return -Infinity;
+
+  const tile = game.board[index];
+  const card = topCard(tile);
+  const enemyThreats = getThreatTilesForOwner(game, enemyId);
+  const botThreats = getThreatTilesForOwner(game, botId);
+  let score = 0;
+
+  if (enemyThreats.has(index)) score += 1800;
+  if (botThreats.has(index)) score -= 220;
+  if ([5, 6, 9, 10].includes(index)) score += 42;
+  if ([0, 3, 12, 15].includes(index)) score += 18;
+
+  if (!card) return score + (enemyThreats.has(index) ? 460 : 18);
+
+  if (card.owner === enemyId) {
+    score += card.value * 70 + tileLinePressure(game, index, enemyId);
+    if (isShooter(card, tile)) score += 520;
+    if (card.value >= 10) score += 180;
+    if (card.protected) score -= 70;
+    return score;
+  }
+
+  score -= 380;
+  score += Math.max(0, 14 - card.value) * 6;
+  if (card.value <= 2) score += 80;
+  return score;
 }
 
 function chooseBotCardMove(game) {
@@ -1409,7 +1460,10 @@ function scoreBotCardMove(game, handIndex, tileIndex, blockThreats) {
   if ([0, 3, 12, 15].includes(tileIndex)) score += 36;
   if (value === 14) score += 460;
   if (value === 3) score += 230;
-  if (value === 6) score += 180 + bestEnemyTileValue(game) * 12;
+  if (value === 6) {
+    const stunScore = bestBotStunTargetScore(game, tileIndex, player.id);
+    score += stunScore > -Infinity ? 160 + Math.min(stunScore, 2200) : -5000;
+  }
   if (value === 4 || value === 5) score += 120 + botShooterPotential(game, tileIndex, value, player.id);
 
   WIN_LINES.forEach((line) => {
@@ -1470,14 +1524,6 @@ function tileLinePressure(game, tileIndex, ownerId) {
     else if (owned === 2) score += 170;
   });
   return score;
-}
-
-function bestEnemyTileValue(game) {
-  const botId = currentPlayer(game).id;
-  return game.board.reduce((best, tile) => {
-    const card = topCard(tile);
-    return card && card.owner !== botId ? Math.max(best, card.value) : best;
-  }, 0);
 }
 
 function botShooterPotential(game, tileIndex, value, ownerId, pierce = false) {
