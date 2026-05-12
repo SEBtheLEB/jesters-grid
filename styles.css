@@ -588,9 +588,9 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 }
 
 .match-header {
-  min-height: clamp(40px, 6.1svh, 56px);
+  min-height: clamp(34px, 5svh, 46px);
   display: grid;
-  grid-template-columns: clamp(46px, 12vw, 58px) minmax(0, 1fr) clamp(46px, 12vw, 58px);
+  grid-template-columns: clamp(40px, 10.4vw, 50px) minmax(0, 1fr) clamp(40px, 10.4vw, 50px);
   align-items: center;
   gap: clamp(5px, 1.6vw, 8px);
 }
@@ -605,7 +605,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   display: grid;
   place-items: center;
   position: relative;
-  padding: 0 clamp(8px, 2.2vw, 12px);
+  padding: 0 clamp(6px, 1.8vw, 10px);
   border: 2px solid rgba(241, 201, 121, .86);
   border-radius: 7px;
   background:
@@ -623,8 +623,8 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   content: "";
   position: absolute;
   top: 50%;
-  width: 9px;
-  height: 9px;
+  width: 7px;
+  height: 7px;
   border: 1px solid var(--gold-2);
   transform: translateY(-50%) rotate(45deg);
   background: #0c1120;
@@ -641,12 +641,12 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 .match-title {
   min-width: 0;
   color: #f5d58e;
-  font-size: clamp(21px, 6.4vw, 32px);
+  font-size: clamp(16px, 4.8vw, 24px);
   font-weight: 900;
   line-height: 1;
   text-align: center;
   text-transform: uppercase;
-  letter-spacing: .055em;
+  letter-spacing: .035em;
   text-shadow:
     0 2px 0 #4a2b0e,
     0 -1px 0 rgba(255, 244, 204, .36),
@@ -656,8 +656,8 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 
 .icon-medallion,
 .settings-button {
-  width: clamp(46px, 12vw, 58px);
-  height: clamp(38px, 5.9svh, 52px);
+  width: clamp(40px, 10.4vw, 50px);
+  height: clamp(32px, 4.8svh, 42px);
   display: grid;
   place-items: center;
   color: var(--gold);
@@ -671,7 +671,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
     inset 0 0 0 1px rgba(255, 231, 162, .14),
     inset 0 0 16px rgba(0, 0, 0, .46),
     0 6px 13px rgba(0, 0, 0, .42);
-  font-size: clamp(8px, 2.35vw, 12px);
+  font-size: clamp(7px, 2vw, 11px);
   font-weight: 900;
   letter-spacing: .05em;
   text-transform: uppercase;
@@ -3269,14 +3269,16 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   }
 
   .match-header {
-    grid-template-columns: 45px minmax(0, 1fr) 45px;
+    min-height: 36px;
+    grid-template-columns: 40px minmax(0, 1fr) 40px;
     gap: 5px;
   }
 
   .icon-medallion,
   .settings-button {
-    width: 45px;
-    font-size: 8px;
+    width: 40px;
+    height: 34px;
+    font-size: 7px;
   }
 
   .title-frame {
@@ -3290,8 +3292,8 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   }
 
   .match-title {
-    font-size: clamp(20px, 6vw, 23px);
-    letter-spacing: .02em;
+    font-size: clamp(16px, 5vw, 20px);
+    letter-spacing: .015em;
   }
 
   .opponent-panel,
@@ -3338,12 +3340,12 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   }
 
   .match-header {
-    min-height: 40px;
+    min-height: 36px;
   }
 
   .icon-medallion,
   .settings-button {
-    height: 38px;
+    height: 34px;
   }
 
   .duelist-bar {
