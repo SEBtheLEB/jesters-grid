@@ -11,6 +11,9 @@
     "websocket",
     "multiplayer"
   ],
+  "dependencies": {
+    "web-push": "^3.6.7"
+  },
   "license": "UNLICENSED",
   "engines": {
     "node": ">=20"

@@ -80,6 +80,7 @@ let queuedRejoinCallbacks = [];
 let requestId = 1;
 const pendingReplies = new Map();
 const clientId = getClientId();
+const ACTIVE_ROOM_KEY = "jg-active-room-v1";
 const screens = {
   menu: document.getElementById("menuScreen"),
   game: document.getElementById("gameScreen"),
@@ -159,6 +160,9 @@ let pendingBoardCutscene = null;
 let boardCutsceneQueue = Promise.resolve();
 let boardCutsceneActive = false;
 let boardCutsceneMessage = "";
+let notificationRegistrationInFlight = false;
+let lastNotificationRegistrationKey = "";
+let roomNotificationPermissionPromise = null;
 
 const DECK_CARD_LAYOUTS = [
   { x: -46, y: -22, r: -8, openX: -90, openY: -42, openR: -9, z: 2 },
@@ -185,6 +189,40 @@ function getClientId() {
   return id;
 }
 
+function savedRoomSession() {
+  try {
+    const session = JSON.parse(localStorage.getItem(ACTIVE_ROOM_KEY) || "null");
+    if (!session || session.clientId !== clientId) return null;
+    if (!session.code || Date.now() - Number(session.updatedAt || 0) > 1000 * 60 * 60 * 24) return null;
+    return session;
+  } catch {
+    return null;
+  }
+}
+
+function savedSeatForCode(code) {
+  const session = savedRoomSession();
+  const normalizedCode = String(code || "").trim().toUpperCase();
+  return session?.code === normalizedCode && Number.isInteger(session.seat) ? session.seat : null;
+}
+
+function rememberRoomSession(code, seat) {
+  const normalizedCode = String(code || "").trim().toUpperCase();
+  if (!normalizedCode || seat !== 0 && seat !== 1) return;
+  localStorage.setItem(ACTIVE_ROOM_KEY, JSON.stringify({
+    code: normalizedCode,
+    seat,
+    clientId,
+    name: playerNameInput.value.trim() || "Jester",
+    updatedAt: Date.now()
+  }));
+}
+
+function forgetRoomSession() {
+  localStorage.removeItem(ACTIVE_ROOM_KEY);
+  lastNotificationRegistrationKey = "";
+}
+
 function applyTheme(theme) {
   document.body.setAttribute("data-theme", theme);
   localStorage.setItem("jg-theme", theme);
@@ -195,6 +233,7 @@ playerNameInput.value = localStorage.getItem("jg-name") || "Jester";
 
 const roomFromUrl = new URLSearchParams(window.location.search).get("room");
 if (roomFromUrl) roomCodeInput.value = roomFromUrl.toUpperCase();
+else if (savedRoomSession()?.code) roomCodeInput.value = savedRoomSession().code;
 
 function showScreen(name) {
   Object.values(screens).forEach((screen) => screen.classList.remove("active"));
@@ -224,13 +263,18 @@ function setLocalMessage(text) {
 
 function activeRoomCode() {
   const urlRoom = new URLSearchParams(window.location.search).get("room") || "";
-  return (snapshot?.room?.code || roomCodeInput.value || urlRoom).trim().toUpperCase();
+  return (snapshot?.room?.code || roomCodeInput.value || urlRoom || savedRoomSession()?.code || "").trim().toUpperCase();
 }
 
 function receiveServerSnapshot(nextSnapshot, renderNow = true) {
   if (!nextSnapshot || isOfflineQuickplay()) return false;
   const previousSnapshot = snapshot;
   snapshot = nextSnapshot;
+  if (snapshot.room?.code && (snapshot.you?.seat === 0 || snapshot.you?.seat === 1)) {
+    rememberRoomSession(snapshot.room.code, snapshot.you.seat);
+    roomCodeInput.value = snapshot.room.code;
+    maybeRegisterRoomNotification();
+  }
   pendingBoardCutscene = { previous: previousSnapshot, next: nextSnapshot };
   if (snapshot.room?.code) {
     startRoomHeartbeat();
@@ -272,9 +316,12 @@ function connectRealtime() {
     setMenuStatus("Connected.");
     if (snapshot?.room?.code) {
       rejoinActiveRoom({ silent: true });
-    } else if (roomFromUrl && !autoJoinAttempted) {
+    } else if ((roomFromUrl || savedRoomSession()?.code) && !autoJoinAttempted) {
       autoJoinAttempted = true;
-      joinRoom();
+      rejoinActiveRoom({ silent: true, callback: (ok) => {
+        if (ok) showScreen("game");
+        else if (roomFromUrl) joinRoom();
+      } });
     }
     startRoomHeartbeat();
     render();
@@ -412,7 +459,7 @@ function startRoomHeartbeat() {
       return;
     }
     rejoinActiveRoom({ silent: true });
-  }, 9000);
+  }, 5000);
 }
 
 function stopRoomHeartbeat() {
@@ -442,6 +489,7 @@ function rejoinActiveRoom(options = {}) {
   }
   rejoinInFlight = true;
   const name = playerNameInput.value.trim() || "Jester";
+  const seat = mySeat();
   const finishRejoin = (ok, result) => {
     rejoinInFlight = false;
     const callbacks = queuedRejoinCallbacks;
@@ -449,13 +497,16 @@ function rejoinActiveRoom(options = {}) {
     options.callback?.(ok, result);
     callbacks.forEach((callback) => callback(ok, result));
   };
-  sendEvent("joinRoom", { code, name, heartbeat: !!options.silent }, (result) => {
+  sendEvent("joinRoom", { code, name, seat, heartbeat: !!options.silent }, (result) => {
     if (!result?.ok) {
       if (!options.silent) setMenuStatus(result?.message || "Could not rejoin room.");
       finishRejoin(false, result);
       return;
     }
     if (result.snapshot) receiveServerSnapshot(result.snapshot, false);
+    if (result.snapshot?.room?.code && (result.snapshot.you?.seat === 0 || result.snapshot.you?.seat === 1)) {
+      rememberRoomSession(result.snapshot.room.code, result.snapshot.you.seat);
+    }
     setMenuStatus("Connected.");
     startRoomHeartbeat();
     finishRejoin(true, result);
@@ -467,9 +518,12 @@ function startHttpFallback() {
   if (usingHttpFallback) return;
   usingHttpFallback = true;
   setMenuStatus("Connected.");
-  if (roomFromUrl && !snapshot && !autoJoinAttempted) {
+  if ((roomFromUrl || savedRoomSession()?.code) && !snapshot && !autoJoinAttempted) {
     autoJoinAttempted = true;
-    joinRoom();
+    rejoinActiveRoom({ silent: true, callback: (ok) => {
+      if (ok) showScreen("game");
+      else if (roomFromUrl) joinRoom();
+    } });
   }
   startPolling();
   startRoomHeartbeat();
@@ -479,7 +533,7 @@ function startHttpFallback() {
 
 function startPolling() {
   if (pollTimer) return;
-  pollTimer = window.setInterval(pollState, 1400);
+  pollTimer = window.setInterval(pollState, 1000);
 }
 
 function stopPolling() {
@@ -544,7 +598,7 @@ function currentGame() {
 }
 
 function mySeat() {
-  return snapshot?.you?.seat ?? null;
+  return snapshot?.you?.seat ?? savedSeatForCode(activeRoomCode());
 }
 
 function isPlayer() {
@@ -2844,6 +2898,7 @@ function renderWaitingRoom() {
   document.getElementById("waitingPlayerTwo").classList.toggle("connected", playerTwo.connected);
   document.getElementById("waitingPlayerTwo").classList.toggle("joined-now", playerTwoJustJoined);
   waitingJoinBanner.classList.toggle("show", playerTwoJustJoined || (playerTwo.connected && !playerTwo.ready));
+  if (seat === 0 && playerTwoJustJoined) showPlayerJoinedNotification(playerTwo.name, snapshot.room.code);
 
   if (!bothConnected) {
     waitingStatus.textContent = "Share the code. The duel begins after both players ready up.";
@@ -3324,9 +3379,16 @@ function sendAction(action, clearSelection = true, recoveryAttempt = 0) {
   });
 }
 
+function refreshActiveConnection() {
+  if (isOfflineQuickplay()) return;
+  if (!socketOpen() && !usingHttpFallback) connectRealtime();
+  if (activeRoomCode()) rejoinActiveRoom({ silent: true });
+}
+
 function createRoom() {
   const name = playerNameInput.value.trim() || "Jester";
   localStorage.setItem("jg-name", name);
+  primeRoomNotificationPermission();
   if (isOfflineQuickplay()) {
     window.clearTimeout(botTurnTimer);
     snapshot = null;
@@ -3336,9 +3398,11 @@ function createRoom() {
       setMenuStatus(result?.message || "Could not create room.");
       return;
     }
+    rememberRoomSession(result.code, result.seat ?? result.snapshot?.you?.seat ?? 0);
     roomCodeInput.value = result.code;
     window.history.replaceState(null, "", `?room=${result.code}`);
     startRoomHeartbeat();
+    maybeRegisterRoomNotification(true);
     showScreen("game");
   });
 }
@@ -3352,6 +3416,7 @@ function createBotRoom() {
   }
   stopPolling();
   stopRoomHeartbeat();
+  forgetRoomSession();
   snapshot = {
     room: {
       code: "",
@@ -3394,6 +3459,7 @@ function joinRoom() {
       setMenuStatus(result?.message || "Could not join room.");
       return;
     }
+    rememberRoomSession(result.code || code, result.seat ?? result.snapshot?.you?.seat ?? 1);
     window.history.replaceState(null, "", `?room=${code}`);
     startRoomHeartbeat();
     showScreen("game");
@@ -3409,6 +3475,7 @@ function leaveRoom() {
   }
   stopPolling();
   stopRoomHeartbeat();
+  forgetRoomSession();
   snapshot = null;
   renderRoomCode = "";
   previousRoomPhase = "";
@@ -3417,6 +3484,94 @@ function leaveRoom() {
   autoJoinAttempted = true;
   window.history.replaceState(null, "", window.location.pathname);
   showScreen("menu");
+}
+
+function pushNotificationsSupported() {
+  return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - base64String.length % 4) % 4);
+  const base64 = `${base64String}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(base64);
+  return Uint8Array.from([...raw].map((character) => character.charCodeAt(0)));
+}
+
+function primeRoomNotificationPermission() {
+  if (!pushNotificationsSupported() || Notification.permission !== "default") return null;
+  roomNotificationPermissionPromise = Notification.requestPermission().catch(() => "default");
+  return roomNotificationPermissionPromise;
+}
+
+async function maybeRegisterRoomNotification(forcePrompt = false) {
+  const code = activeRoomCode();
+  const seat = mySeat();
+  if (!code || seat !== 0 || isOfflineQuickplay() || !pushNotificationsSupported()) return;
+  if (notificationRegistrationInFlight) return;
+  const registrationKey = `${code}:${seat}`;
+  if (!forcePrompt && lastNotificationRegistrationKey === registrationKey) return;
+  if (Notification.permission === "denied") return;
+  if (!forcePrompt && Notification.permission !== "granted") return;
+
+  notificationRegistrationInFlight = true;
+  try {
+    let permission = roomNotificationPermissionPromise
+      ? await roomNotificationPermissionPromise
+      : Notification.permission;
+    if (permission === "default" && forcePrompt) permission = await Notification.requestPermission();
+    if (permission !== "granted") return;
+
+    const keyResponse = await fetch("/api/push-public-key", { cache: "no-store" });
+    const keyResult = await keyResponse.json();
+    if (!keyResult.ok || !keyResult.publicKey) return;
+
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(keyResult.publicKey)
+      });
+    }
+
+    const response = await fetch("/api/register-room-notification", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code, clientId, seat, subscription: subscription.toJSON() })
+    });
+    const result = await response.json();
+    if (result.ok) {
+      lastNotificationRegistrationKey = registrationKey;
+      if (forcePrompt) setMenuStatus("Room alerts enabled.");
+    }
+  } catch {
+    if (forcePrompt) setMenuStatus("Room created. Alerts may need browser notification permission.");
+  } finally {
+    notificationRegistrationInFlight = false;
+  }
+}
+
+async function showPlayerJoinedNotification(playerName, roomCode) {
+  if (!document.hidden || !pushNotificationsSupported() || Notification.permission !== "granted") return;
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    registration.showNotification("Jester's Grid", {
+      body: `${playerName || "Player 2"} is waiting in room ${roomCode}.`,
+      icon: "/icon.svg",
+      badge: "/icon.svg",
+      tag: `jg-room-${roomCode}`,
+      data: { url: `/?room=${roomCode}` }
+    });
+  } catch {
+    try {
+      new Notification("Jester's Grid", {
+        body: `${playerName || "Player 2"} is waiting in room ${roomCode}.`,
+        icon: "/icon.svg"
+      });
+    } catch {
+      // Notification support can vary on mobile browsers.
+    }
+  }
 }
 
 async function copyInvite() {
@@ -3438,6 +3593,11 @@ async function copyInvite() {
 
 connectRealtime();
 
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refreshActiveConnection();
+});
+window.addEventListener("focus", refreshActiveConnection);
+window.addEventListener("online", refreshActiveConnection);
 document.getElementById("createRoomBtn").addEventListener("click", createRoom);
 document.getElementById("joinRoomBtn").addEventListener("click", joinRoom);
 quickplayBotBtn.addEventListener("click", createBotRoom);

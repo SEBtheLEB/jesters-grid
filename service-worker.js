@@ -1,4 +1,4 @@
-const CACHE_NAME = "jesters-grid-pwa-v20";
+const CACHE_NAME = "jesters-grid-pwa-v21";
 const APP_ASSETS = [
   "/",
   "/index.html",
@@ -56,5 +56,38 @@ self.addEventListener("fetch", (event) => {
         return response;
       })
       .catch(() => caches.match(request))
+  );
+});
+
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { body: event.data ? event.data.text() : "" };
+  }
+
+  const roomCode = data.code || "";
+  event.waitUntil(self.registration.showNotification(data.title || "Jester's Grid", {
+    body: data.body || "A duelist is waiting in your room.",
+    icon: "/icon.svg",
+    badge: "/icon.svg",
+    tag: roomCode ? `jg-room-${roomCode}` : "jg-room",
+    requireInteraction: true,
+    data: { url: data.url || "/" }
+  }));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = new URL(event.notification.data?.url || "/", self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url === targetUrl && "focus" in client) return client.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
+      return null;
+    })
   );
 });

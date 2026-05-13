@@ -2,8 +2,52 @@ const crypto = require("crypto");
 const fs = require("fs");
 const http = require("http");
 const path = require("path");
+let webpush = null;
+try {
+  webpush = require("web-push");
+} catch {
+  webpush = null;
+}
+
+function base64Url(buffer) {
+  return Buffer.from(buffer).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function createStableVapidKeys() {
+  const seed = process.env.VAPID_SEED ||
+    process.env.VERCEL_PROJECT_ID ||
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ||
+    "jesters-grid-default-vapid-seed";
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      const privateKey = crypto.createHash("sha256").update(`${seed}:${attempt}`).digest();
+      const ecdh = crypto.createECDH("prime256v1");
+      ecdh.setPrivateKey(privateKey);
+      return {
+        publicKey: base64Url(ecdh.getPublicKey(null, "uncompressed")),
+        privateKey: base64Url(ecdh.getPrivateKey())
+      };
+    } catch {
+      // Try the next hash if the curve rejects this private key.
+    }
+  }
+  return webpush.generateVAPIDKeys();
+}
 
 const PORT = process.env.PORT || 3000;
+const GENERATED_VAPID_KEYS = webpush && (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY)
+  ? createStableVapidKeys()
+  : null;
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || GENERATED_VAPID_KEYS?.publicKey || "";
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || GENERATED_VAPID_KEYS?.privateKey || "";
+const VAPID_CONTACT = process.env.VAPID_CONTACT || "mailto:notifications@jesters-grid.app";
+const PUSH_READY = !!(webpush && VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY);
+const REDIS_REST_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || "";
+const REDIS_REST_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || "";
+const DURABLE_ROOM_STORE = !!(REDIS_REST_URL && REDIS_REST_TOKEN);
+if (PUSH_READY) {
+  webpush.setVapidDetails(VAPID_CONTACT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+}
 const CARD_NAMES = {
   1: "Squire",
   2: "Page",
@@ -53,7 +97,7 @@ setInterval(() => {
   const now = Date.now();
   for (const [code, room] of rooms) {
     const empty = room.players.every((player, index) => !player.connected || index === room.botSeat);
-    if (empty && now - room.createdAt > 1000 * 60 * 60 * 6) rooms.delete(code);
+    if (empty && now - room.createdAt > 1000 * 60 * 60 * 6) void removeRoom(code);
   }
 }, 1000 * 60 * 15).unref();
 
@@ -69,7 +113,13 @@ function handleHttpRequest(req, res) {
   }
 
   if (url.pathname === "/healthz") {
-    sendJsonResponse(res, { ok: true, rooms: rooms.size, clients: clients.size });
+    sendJsonResponse(res, {
+      ok: true,
+      rooms: rooms.size,
+      clients: clients.size,
+      roomStore: DURABLE_ROOM_STORE ? "durable" : "memory",
+      push: PUSH_READY
+    });
     return;
   }
   if (url.pathname.startsWith("/api/")) {
@@ -122,14 +172,25 @@ function serveSkinAsset(res, pathname) {
 async function handleApiRequest(req, res, url) {
   try {
     if (url.pathname === "/api/state" && req.method === "GET") {
-      const room = rooms.get(String(url.searchParams.get("code") || "").trim().toUpperCase());
+      const room = await loadRoom(url.searchParams.get("code"));
       if (!room) {
         sendJsonResponse(res, fail("Room not found."));
         return;
       }
       const seat = resolveSeat(room, url.searchParams.get("clientId"), url.searchParams.get("seat"));
+      touchSeatConnection(room, seat);
       advanceBotIfNeeded(room);
+      await saveRoom(room);
       sendJsonResponse(res, { ok: true, snapshot: snapshotFor(room, seat) });
+      return;
+    }
+
+    if (url.pathname === "/api/push-public-key" && req.method === "GET") {
+      if (!PUSH_READY) {
+        sendJsonResponse(res, fail("Push notifications are not configured on this server."));
+        return;
+      }
+      sendJsonResponse(res, { ok: true, publicKey: VAPID_PUBLIC_KEY });
       return;
     }
 
@@ -140,43 +201,73 @@ async function handleApiRequest(req, res, url) {
 
     const body = await readJsonBody(req);
     if (url.pathname === "/api/create-room") {
-      const code = createRoomCode();
+      const code = await createUniqueRoomCode();
       const clientId = cleanClientId(body.clientId);
       const room = createRoomState(code, cleanName(body.name, "Player 1"), clientId);
-      rooms.set(code, room);
+      await saveRoom(room);
       sendJsonResponse(res, { ok: true, code, seat: 0, snapshot: snapshotFor(room, 0) });
       return;
     }
 
     if (url.pathname === "/api/create-bot-room") {
-      const code = createRoomCode();
+      const code = await createUniqueRoomCode();
       const clientId = cleanClientId(body.clientId);
       const room = createBotRoomState(code, cleanName(body.name, "Player 1"), clientId);
-      rooms.set(code, room);
+      await saveRoom(room);
       sendJsonResponse(res, { ok: true, code, seat: 0, snapshot: snapshotFor(room, 0) });
       return;
     }
 
     if (url.pathname === "/api/join-room") {
-      const room = rooms.get(String(body.code || "").trim().toUpperCase());
+      const room = await loadRoom(body.code);
       if (!room) {
         sendJsonResponse(res, fail("Room not found."));
         return;
       }
       const stableClientId = cleanClientId(body.clientId);
       const wasDisconnected = room.players.some((player) => player.clientId === stableClientId && !player.connected);
-      const seat = claimSeat(room, stableClientId, body.name);
+      const wasPlayerTwoConnected = room.players[1]?.connected;
+      const seat = claimSeat(room, stableClientId, body.name, body.seat);
       if (seat === null) {
         sendJsonResponse(res, fail("Room is full."));
         return;
       }
+      if (seat === 1 && !wasPlayerTwoConnected) notifyPlayerJoined(room, 0, seat);
       if (!body.heartbeat || wasDisconnected) emitRoom(room);
+      await saveRoom(room);
       sendJsonResponse(res, { ok: true, code: room.code, seat, snapshot: snapshotFor(room, seat) });
       return;
     }
 
+    if (url.pathname === "/api/register-room-notification") {
+      if (!PUSH_READY) {
+        sendJsonResponse(res, fail("Push notifications are not configured on this server."));
+        return;
+      }
+      const room = await loadRoom(body.code);
+      if (!room) {
+        sendJsonResponse(res, fail("Room not found."));
+        return;
+      }
+      const seat = resolveSeat(room, body.clientId, body.seat);
+      touchSeatConnection(room, seat);
+      if (seat !== 0 && seat !== 1) {
+        sendJsonResponse(res, fail("Join a room first."));
+        return;
+      }
+      if (!isValidPushSubscription(body.subscription)) {
+        sendJsonResponse(res, fail("Invalid notification subscription."));
+        return;
+      }
+      room.pushSubscriptions[seat] = body.subscription;
+      room.notificationOptInAt[seat] = Date.now();
+      await saveRoom(room);
+      sendJsonResponse(res, ok("Notifications enabled."));
+      return;
+    }
+
     if (url.pathname === "/api/leave-room") {
-      const room = rooms.get(String(body.code || "").trim().toUpperCase());
+      const room = await loadRoom(body.code);
       if (!room) {
         sendJsonResponse(res, ok());
         return;
@@ -184,23 +275,26 @@ async function handleApiRequest(req, res, url) {
       const seat = resolveSeat(room, body.clientId, body.seat);
       releaseSeat(room, seat);
       emitRoom(room);
-      deleteRoomIfEmpty(room);
+      await deleteRoomIfEmpty(room);
+      if (rooms.has(room.code)) await saveRoom(room);
       sendJsonResponse(res, ok());
       return;
     }
 
     if (url.pathname === "/api/action") {
-      const room = rooms.get(String(body.code || "").trim().toUpperCase());
+      const room = await loadRoom(body.code);
       if (!room) {
         sendJsonResponse(res, fail("Join a room first."));
         return;
       }
       const seat = resolveSeat(room, body.clientId, body.seat);
+      touchSeatConnection(room, seat);
       const result = performAction(room, seat, body.action || {});
       if (result.ok) {
         advanceBotIfNeeded(room);
         emitRoom(room);
       }
+      await saveRoom(room);
       sendJsonResponse(res, { ...result, snapshot: snapshotFor(room, seat) });
       return;
     }
@@ -260,6 +354,56 @@ function serveFile(res, filePath, contentType) {
     });
     res.end(content);
   });
+}
+
+async function redisCommand(command) {
+  if (!DURABLE_ROOM_STORE) return null;
+  const response = await fetch(REDIS_REST_URL, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${REDIS_REST_TOKEN}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify(command)
+  });
+  if (!response.ok) throw new Error("Room store unavailable.");
+  const data = await response.json();
+  if (data.error) throw new Error(String(data.error));
+  return data.result;
+}
+
+async function loadRoom(code) {
+  const normalizedCode = String(code || "").trim().toUpperCase();
+  if (!normalizedCode) return null;
+  const cached = rooms.get(normalizedCode);
+  if (cached) return cached;
+  if (!DURABLE_ROOM_STORE) return null;
+  const raw = await redisCommand(["GET", `room:${normalizedCode}`]);
+  if (!raw) return null;
+  const room = JSON.parse(raw);
+  rooms.set(normalizedCode, room);
+  return room;
+}
+
+async function saveRoom(room) {
+  if (!room?.code) return;
+  rooms.set(room.code, room);
+  if (DURABLE_ROOM_STORE) {
+    await redisCommand(["SET", `room:${room.code}`, JSON.stringify(room), "EX", "21600"]);
+  }
+}
+
+async function removeRoom(code) {
+  const normalizedCode = String(code || "").trim().toUpperCase();
+  if (!normalizedCode) return;
+  rooms.delete(normalizedCode);
+  if (DURABLE_ROOM_STORE) await redisCommand(["DEL", `room:${normalizedCode}`]);
+}
+
+async function createUniqueRoomCode() {
+  let code = createRoomCode();
+  while (await loadRoom(code)) code = createRoomCode();
+  return code;
 }
 
 function handleUpgrade(req, socket) {
@@ -400,7 +544,8 @@ function handleClientMessage(client, raw) {
 
     const stableClientId = cleanClientId(payload?.clientId);
     const wasDisconnected = room.players.some((player) => player.clientId === stableClientId && !player.connected);
-    const seat = claimSeat(room, stableClientId, payload?.name);
+    const wasPlayerTwoConnected = room.players[1]?.connected;
+    const seat = claimSeat(room, stableClientId, payload?.name, payload?.seat);
     if (seat === null) {
       reply(client, id, fail("Room is full."));
       return;
@@ -409,6 +554,7 @@ function handleClientMessage(client, raw) {
     client.roomCode = room.code;
     client.seat = seat;
     reply(client, id, { ok: true, code: room.code, seat, snapshot: snapshotFor(room, seat) });
+    if (seat === 1 && !wasPlayerTwoConnected) notifyPlayerJoined(room, 0, seat);
     if (!payload?.heartbeat || wasDisconnected) emitRoom(room);
     return;
   }
@@ -459,7 +605,7 @@ function handleClientMessage(client, raw) {
       const seat = resolveSeat(room, payload?.clientId || client.clientId, payload?.seat ?? client.seat);
       releaseSeat(room, seat);
       emitRoom(room);
-      deleteRoomIfEmpty(room);
+      void deleteRoomIfEmpty(room);
     }
     client.roomCode = null;
     client.seat = null;
@@ -538,7 +684,7 @@ function handleClientDisconnect(client) {
     if (seatIndex >= 0 && room.phase !== "playing") room.ready[seatIndex] = false;
     setMessage(room.game, `${player.name} disconnected.`);
     emitRoom(room);
-    deleteRoomIfEmpty(room);
+    void deleteRoomIfEmpty(room);
   }
 }
 
@@ -556,6 +702,9 @@ function createRoomState(code, playerName, clientId) {
     createdAt: Date.now(),
     joinedAt: null,
     startedAt: null,
+    pushSubscriptions: [null, null],
+    notificationOptInAt: [0, 0],
+    lastJoinNotificationAt: [0, 0],
     players: [
       makeSeat(1, playerName, clientId),
       makeSeat(2, "Player 2", null)
@@ -589,7 +738,7 @@ function cleanName(value, fallback) {
   return cleaned || fallback;
 }
 
-function claimSeat(room, clientId, name) {
+function claimSeat(room, clientId, name, requestedSeat = null) {
   const existingIndex = room.players.findIndex((seat) => seat.clientId === clientId);
   if (existingIndex >= 0) {
     const wasDisconnected = !room.players[existingIndex].connected;
@@ -599,27 +748,51 @@ function claimSeat(room, clientId, name) {
     return existingIndex;
   }
 
-  const openIndex = room.players.findIndex((seat) => !seat.connected);
+  const preferredSeat = normalizeSeat(requestedSeat);
+  if (preferredSeat !== null) {
+    const player = room.players[preferredSeat];
+    if (player && !player.connected && !player.clientId) {
+      assignSeat(room, preferredSeat, clientId, name);
+      return preferredSeat;
+    }
+  }
+
+  const openIndex = room.players.findIndex((seat) => !seat.connected && !seat.clientId);
   if (openIndex >= 0) {
-    room.players[openIndex].clientId = clientId;
-    room.players[openIndex].connected = true;
-    room.players[openIndex].name = cleanName(name, `Player ${openIndex + 1}`);
-    if (room.phase !== "playing") room.ready[openIndex] = false;
-    room.joinedAt = Date.now();
-    setMessage(room.game, `${room.players[openIndex].name} joined as Player ${openIndex + 1}.`);
+    assignSeat(room, openIndex, clientId, name);
     return openIndex;
   }
   return null;
 }
 
+function assignSeat(room, seatIndex, clientId, name) {
+  room.players[seatIndex].clientId = clientId;
+  room.players[seatIndex].connected = true;
+  room.players[seatIndex].name = cleanName(name, `Player ${seatIndex + 1}`);
+  if (room.phase !== "playing") room.ready[seatIndex] = false;
+  room.joinedAt = Date.now();
+  setMessage(room.game, `${room.players[seatIndex].name} joined as Player ${seatIndex + 1}.`);
+}
+
+function normalizeSeat(value) {
+  const seat = Number(value);
+  return Number.isInteger(seat) && seat >= 0 && seat <= 1 ? seat : null;
+}
+
 function resolveSeat(room, clientId, requestedSeat) {
   const cleanId = cleanClientId(clientId);
-  const seat = Number(requestedSeat);
-  if (Number.isInteger(seat) && seat >= 0 && seat <= 1 && room.players[seat]?.clientId === cleanId) {
+  const seat = normalizeSeat(requestedSeat);
+  if (seat !== null && room.players[seat]?.clientId === cleanId) {
     return seat;
   }
   const found = room.players.findIndex((player) => player.clientId === cleanId);
   return found >= 0 ? found : null;
+}
+
+function touchSeatConnection(room, seatIndex) {
+  if (seatIndex !== 0 && seatIndex !== 1) return;
+  if (seatIndex === room.botSeat) return;
+  if (room.players[seatIndex]?.clientId) room.players[seatIndex].connected = true;
 }
 
 function releaseSeat(room, seatIndex) {
@@ -632,11 +805,48 @@ function releaseSeat(room, seatIndex) {
   if (room.phase !== "playing") setMessage(room.game, `${player.name} left the waiting room.`);
 }
 
-function deleteRoomIfEmpty(room) {
+async function deleteRoomIfEmpty(room) {
   const noHumansConnected = room.players.every((player, index) => !player.connected || index === room.botSeat);
   if (!noHumansConnected) return;
+  const hasReservedHumanSeat = room.players.some((player, index) => index !== room.botSeat && !!player.clientId);
+  if (room.mode !== "quickplay" && hasReservedHumanSeat) return;
   if (room.phase === "playing" && room.mode !== "quickplay") return;
-  rooms.delete(room.code);
+  await removeRoom(room.code);
+}
+
+function isValidPushSubscription(subscription) {
+  return !!(
+    subscription &&
+    typeof subscription.endpoint === "string" &&
+    subscription.keys &&
+    typeof subscription.keys.p256dh === "string" &&
+    typeof subscription.keys.auth === "string"
+  );
+}
+
+function notifyPlayerJoined(room, targetSeat, joinedSeat) {
+  if (!PUSH_READY || room.phase !== "waiting") return;
+  if (targetSeat === joinedSeat) return;
+  const subscription = room.pushSubscriptions?.[targetSeat];
+  if (!isValidPushSubscription(subscription)) return;
+  const now = Date.now();
+  if (now - (room.lastJoinNotificationAt?.[targetSeat] || 0) < 15000) return;
+  room.lastJoinNotificationAt[targetSeat] = now;
+
+  const joinedPlayer = room.players[joinedSeat];
+  const joinedName = cleanName(joinedPlayer?.name, `Player ${joinedSeat + 1}`);
+  const payload = JSON.stringify({
+    title: "Jester's Grid",
+    body: `${joinedName} is waiting in room ${room.code}.`,
+    url: `/?room=${room.code}`,
+    code: room.code
+  });
+
+  webpush.sendNotification(subscription, payload).catch((error) => {
+    if (error?.statusCode === 404 || error?.statusCode === 410) {
+      room.pushSubscriptions[targetSeat] = null;
+    }
+  });
 }
 
 function createRoomCode() {
