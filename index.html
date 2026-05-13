@@ -8,41 +8,127 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/icon.svg" />
-  <link rel="stylesheet" href="/styles.css?v=21" />
-  <link rel="stylesheet" href="/assets/skins/default/skin.css?v=21" />
+  <link rel="stylesheet" href="/styles.css?v=22" />
+  <link rel="stylesheet" href="/assets/skins/default/skin.css?v=22" />
 </head>
 <body data-theme="dark">
   <main class="phone">
-    <section id="menuScreen" class="screen active">
-      <div class="menu-content">
-        <div class="menu-body">
-          <div class="logo">
-            <h1>Jester's<br>Grid</h1>
-            <span>Tactical Court Duel</span>
-          </div>
-          <div class="hero-card" aria-hidden="true">
-            <div class="hat"></div>
-            <div class="hero-face"></div>
+    <section id="menuScreen" class="screen active home-screen">
+      <div class="menu-content home-shell">
+        <div class="home-corner-bar" aria-label="Home shortcuts">
+          <button id="newsBtn" class="home-corner-button icon-button asset-slot fallback-frame card-hover" data-menu-action="news" data-asset-bg="bottomButtonFrame" type="button" aria-label="News">
+            <span class="ui-icon news-icon asset-slot" data-asset-bg="newsIcon" aria-hidden="true"></span>
+            <span>News</span>
+          </button>
+          <button id="rewardsBtn" class="home-corner-button icon-button asset-slot fallback-frame sparkle card-hover" data-menu-action="rewards" data-asset-bg="bottomButtonFrame" type="button" aria-label="Rewards">
+            <span class="ui-icon rewards-icon asset-slot" data-asset-bg="rewardsIcon" aria-hidden="true"></span>
+            <span>Rewards</span>
+          </button>
+        </div>
+
+        <section class="home-hero" aria-label="Jester's Grid">
+          <div class="mascot-slot mascot-left asset-slot fallback-frame soft-breathe" data-asset-img="girlJester">
+            <img class="asset-img" alt="Girl jester mascot" />
+            <div class="mascot-fallback mascot-girl" aria-hidden="true">
+              <span class="mascot-hat"></span>
+              <span class="mascot-face"></span>
+              <span class="mascot-collar"></span>
+            </div>
           </div>
 
-          <div class="name-panel fantasy-panel">
-            <label class="field-label" for="playerName">Duelist Name</label>
-            <input id="playerName" class="text-input" maxlength="18" autocomplete="nickname" value="Jester" />
+          <div class="title-stack">
+            <div class="title-backing asset-slot fallback-frame idle-float" data-asset-bg="titleBacking">
+              <div class="logo-banner asset-slot" data-asset-bg="logoBanner">
+                <i class="title-star left" aria-hidden="true"></i>
+                <h1>Jester's Grid</h1>
+                <i class="title-star right" aria-hidden="true"></i>
+              </div>
+            </div>
+            <p class="home-tagline">Where every step is a joke,<br>and every joke changes fate.</p>
           </div>
+
+          <div class="mascot-slot mascot-right asset-slot fallback-frame soft-breathe" data-asset-img="boyJester">
+            <img class="asset-img" alt="Boy jester mascot" />
+            <div class="mascot-fallback mascot-boy" aria-hidden="true">
+              <span class="mascot-hat"></span>
+              <span class="mascot-face"></span>
+              <span class="mascot-collar"></span>
+            </div>
+          </div>
+        </section>
+
+        <section class="profile-panel fantasy-panel asset-slot fallback-frame" data-asset-bg="profileFrame" aria-label="Player profile">
+          <div class="profile-avatar asset-slot fallback-frame" data-asset-img="playerAvatar">
+            <img class="asset-img" alt="Player avatar" />
+            <span class="avatar-fallback" aria-hidden="true">J</span>
+          </div>
+          <div class="profile-copy">
+            <label class="visually-hidden" for="playerName">Player name</label>
+            <input id="playerName" class="profile-name-input" maxlength="18" autocomplete="nickname" value="Jester" />
+            <div class="profile-meta">
+              <span>Trickster</span>
+              <strong>Level 14</strong>
+            </div>
+            <div class="xp-track" aria-label="350 of 1000 XP">
+              <span style="width: 35%"></span>
+            </div>
+            <div class="xp-copy">350 / 1000 XP</div>
+          </div>
+          <div class="currency-stack" aria-label="Currencies">
+            <div class="currency-row">
+              <span class="currency-icon coin-icon asset-slot" data-asset-bg="coinIcon" aria-hidden="true"></span>
+              <strong>1,250</strong>
+              <button class="currency-plus" data-menu-action="coins" type="button" aria-label="Add coins">+</button>
+            </div>
+            <div class="currency-row">
+              <span class="currency-icon gem-icon asset-slot" data-asset-bg="gemIcon" aria-hidden="true"></span>
+              <strong>340</strong>
+              <button class="currency-plus" data-menu-action="gems" type="button" aria-label="Add gems">+</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="home-main-actions" aria-label="Main actions">
+          <button id="playMenuCard" class="menu-card asset-slot fallback-frame card-hover tap-bounce" data-menu-action="play" data-asset-bg="playCard" type="button">
+            <span class="menu-card-icon play-card-icon">
+              <span class="mini-card asset-slot red-back" data-asset-bg="cardBackRed"></span>
+            </span>
+            <strong>Play</strong>
+            <em>Room or bot duel</em>
+          </button>
+          <button id="decksMenuCard" class="menu-card asset-slot fallback-frame card-hover tap-bounce" data-menu-action="decks" data-asset-bg="decksCard" type="button">
+            <span class="menu-card-icon decks-card-icon">
+              <span class="mini-card asset-slot red-back" data-asset-bg="cardBackRed"></span>
+              <span class="mini-card asset-slot blue-back" data-asset-bg="cardBackBlue"></span>
+            </span>
+            <strong>Decks</strong>
+            <em>Coming soon</em>
+          </button>
+          <button id="rankedMenuCard" class="menu-card asset-slot fallback-frame card-hover tap-bounce" data-menu-action="ranked" data-asset-bg="rankedCard" type="button">
+            <span class="menu-card-icon ranked-card-icon" aria-hidden="true"></span>
+            <strong>Ranked</strong>
+            <em>Coming soon</em>
+          </button>
+        </section>
+
+        <section id="playDrawer" class="home-play-panel fantasy-panel" aria-label="Play options">
+          <nav class="menu-tabs" aria-label="Play mode">
+            <button id="roomTabBtn" class="menu-tab active" type="button" role="tab" aria-selected="true" aria-controls="roomTabPanel">Room Multiplayer</button>
+            <button id="quickplayTabBtn" class="menu-tab" type="button" role="tab" aria-selected="false" aria-controls="quickplayTabPanel">Quickplay Bot</button>
+          </nav>
 
           <div id="roomTabPanel" class="menu-tab-panel active" role="tabpanel" aria-labelledby="roomTabBtn">
-            <div class="lobby-panel fantasy-panel">
+            <div class="lobby-panel">
               <button class="big-button" id="createRoomBtn">Create Duel</button>
               <div class="join-row">
                 <input id="roomCodeInput" class="text-input" maxlength="6" placeholder="CODE" autocomplete="off" />
                 <button class="small-button" id="joinRoomBtn">Join</button>
               </div>
-              <p id="menuStatus" class="status-copy">Connect to start a 1v1 room.</p>
             </div>
           </div>
 
           <div id="quickplayTabPanel" class="menu-tab-panel" role="tabpanel" aria-labelledby="quickplayTabBtn">
-            <div class="quickplay-panel fantasy-panel">
+            <div class="quickplay-panel">
               <div class="bot-card">
                 <div class="bot-avatar" aria-hidden="true">CJ</div>
                 <div class="bot-copy">
@@ -51,21 +137,27 @@
                   <em>Gilded Automaton Rank</em>
                 </div>
               </div>
-              <p class="quickplay-copy">Start a solo duel against a tactical court bot. No room code needed.</p>
               <button class="big-button" id="quickplayBotBtn">Play Bot Duel</button>
             </div>
           </div>
 
+          <p id="menuStatus" class="status-copy home-status">Tap Play to choose a duel.</p>
           <div class="menu-actions">
             <button class="small-button" id="rulesBtn">Rules</button>
             <button class="small-button red" id="resetBtn">New Match</button>
           </div>
-        </div>
+        </section>
 
-        <nav class="menu-tabs fantasy-panel" aria-label="Main menu">
-          <button id="roomTabBtn" class="menu-tab active" type="button" role="tab" aria-selected="true" aria-controls="roomTabPanel">Room Multiplayer</button>
-          <button id="quickplayTabBtn" class="menu-tab" type="button" role="tab" aria-selected="false" aria-controls="quickplayTabPanel">Quickplay</button>
+        <nav class="home-icon-menu" aria-label="Secondary menu">
+          <button class="home-icon-button icon-button asset-slot fallback-frame card-hover" data-menu-action="shop" data-asset-bg="bottomButtonFrame" type="button"><span class="bottom-icon shop-icon" aria-hidden="true"></span><span>Shop</span></button>
+          <button class="home-icon-button icon-button asset-slot fallback-frame card-hover" data-menu-action="collection" data-asset-bg="bottomButtonFrame" type="button"><span class="bottom-icon collection-icon" aria-hidden="true"></span><span>Collection</span></button>
+          <button class="home-icon-button icon-button asset-slot fallback-frame card-hover" data-menu-action="quests" data-asset-bg="bottomButtonFrame" type="button"><span class="bottom-icon quests-icon" aria-hidden="true"></span><span>Quests</span></button>
+          <button class="home-icon-button icon-button asset-slot fallback-frame card-hover" data-menu-action="settings" data-asset-bg="bottomButtonFrame" type="button"><span class="bottom-icon settings-icon" aria-hidden="true"></span><span>Settings</span></button>
+          <button class="home-icon-button icon-button asset-slot fallback-frame card-hover" data-menu-action="profile" data-asset-bg="bottomButtonFrame" type="button"><span class="bottom-icon profile-icon" aria-hidden="true"></span><span>Profile</span></button>
+          <button class="home-icon-button icon-button asset-slot fallback-frame card-hover" data-menu-action="exit" data-asset-bg="bottomButtonFrame" type="button"><span class="bottom-icon exit-icon" aria-hidden="true"></span><span>Exit</span></button>
         </nav>
+
+        <div id="menuToast" class="menu-toast" aria-live="polite"></div>
       </div>
     </section>
 
@@ -246,6 +338,6 @@
     </div>
   </main>
 
-  <script src="/client.js?v=21"></script>
+  <script src="/client.js?v=22"></script>
 </body>
 </html>

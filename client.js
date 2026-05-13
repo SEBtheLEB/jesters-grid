@@ -69,6 +69,27 @@ const CARD_DETAILS = {
   14: "Jester locks the tile. A locked tile cannot be covered."
 };
 
+// Add your custom PNG paths here. Leave empty to use the CSS fallback artwork.
+const UI_ASSETS = {
+  logoBanner: "",
+  titleBacking: "",
+  girlJester: "",
+  boyJester: "",
+  playerAvatar: "",
+  profileFrame: "",
+  playCard: "",
+  decksCard: "",
+  rankedCard: "",
+  bottomButtonFrame: "",
+  newsIcon: "",
+  rewardsIcon: "",
+  coinIcon: "",
+  gemIcon: "",
+  cardBackRed: "",
+  cardBackBlue: "",
+  cornerOrnament: ""
+};
+
 let socket = null;
 let autoJoinAttempted = false;
 let usingHttpFallback = false;
@@ -125,6 +146,8 @@ const quickplayTabBtn = document.getElementById("quickplayTabBtn");
 const roomTabPanel = document.getElementById("roomTabPanel");
 const quickplayTabPanel = document.getElementById("quickplayTabPanel");
 const quickplayBotBtn = document.getElementById("quickplayBotBtn");
+const playDrawer = document.getElementById("playDrawer");
+const menuToast = document.getElementById("menuToast");
 
 let snapshot = null;
 let selectedCardIndex = null;
@@ -254,6 +277,92 @@ function showMenuTab(tab) {
   roomTabPanel.classList.toggle("active", !quickplay);
   quickplayTabPanel.classList.toggle("active", quickplay);
   setMenuStatus(quickplay ? "Quickplay starts a solo bot duel." : "Connect to start a 1v1 room.");
+}
+
+function assetValue(key) {
+  return String(UI_ASSETS[key] || "").trim();
+}
+
+function ensureAssetBackgroundLayer(element) {
+  let layer = Array.from(element.children).find((child) => child.classList?.contains("asset-bg"));
+  if (!layer) {
+    layer = document.createElement("span");
+    layer.className = "asset-bg";
+    layer.setAttribute("aria-hidden", "true");
+    element.prepend(layer);
+  }
+  return layer;
+}
+
+function applyHomeUiAssets(root = document) {
+  root.querySelectorAll("[data-asset-bg]").forEach((element) => {
+    const path = assetValue(element.dataset.assetBg);
+    if (!path) {
+      element.classList.remove("png-backed");
+      const layer = Array.from(element.children).find((child) => child.classList?.contains("asset-bg"));
+      if (layer) layer.remove();
+      return;
+    }
+    const layer = ensureAssetBackgroundLayer(element);
+    layer.style.backgroundImage = `url("${path}")`;
+    element.classList.add("png-backed");
+  });
+
+  root.querySelectorAll("[data-asset-img]").forEach((slot) => {
+    const path = assetValue(slot.dataset.assetImg);
+    const image = slot.querySelector("img.asset-img");
+    if (!image) return;
+    if (!path) {
+      image.removeAttribute("src");
+      slot.classList.remove("png-backed");
+      return;
+    }
+    image.src = path;
+    slot.classList.add("png-backed");
+  });
+}
+
+function showMenuToast(text) {
+  if (!menuToast) return;
+  window.clearTimeout(showMenuToast.timer);
+  menuToast.textContent = text;
+  menuToast.classList.add("show");
+  showMenuToast.timer = window.setTimeout(() => menuToast.classList.remove("show"), 1700);
+}
+
+function bounceMenuTarget(target) {
+  if (!target?.classList?.contains("tap-bounce")) return;
+  target.classList.remove("bump");
+  void target.offsetWidth;
+  target.classList.add("bump");
+}
+
+function handleMenuAction(action, target = null) {
+  console.log(`Jester's Grid menu action: ${action}`);
+  bounceMenuTarget(target);
+  const messages = {
+    decks: "Deck builder is coming soon.",
+    ranked: "Ranked mode is coming soon.",
+    shop: "Shop is coming soon.",
+    collection: "Collection is coming soon.",
+    quests: "Quests are coming soon.",
+    settings: "Settings are coming soon.",
+    profile: "Profile details are coming soon.",
+    exit: "Use your browser controls to leave the app.",
+    news: "News scroll is coming soon.",
+    rewards: "Rewards chest is coming soon.",
+    coins: "Coin shop is coming soon.",
+    gems: "Gem shop is coming soon."
+  };
+
+  if (action === "play") {
+    playDrawer?.classList.add("open");
+    showMenuTab("room");
+    showMenuToast("Choose Room Multiplayer or Quickplay.");
+    return;
+  }
+
+  showMenuToast(messages[action] || `${action} coming soon.`);
 }
 
 function setLocalMessage(text) {
@@ -3591,6 +3700,10 @@ async function copyInvite() {
   settingsMenu.classList.remove("open");
 }
 
+window.UI_ASSETS = UI_ASSETS;
+window.applyHomeUiAssets = applyHomeUiAssets;
+window.handleMenuAction = handleMenuAction;
+applyHomeUiAssets();
 connectRealtime();
 
 document.addEventListener("visibilitychange", () => {
@@ -3598,6 +3711,12 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("focus", refreshActiveConnection);
 window.addEventListener("online", refreshActiveConnection);
+document.querySelectorAll("[data-menu-action]").forEach((button) => {
+  button.addEventListener("click", (event) => {
+    const action = event.currentTarget.dataset.menuAction;
+    if (action) handleMenuAction(action, event.currentTarget);
+  });
+});
 document.getElementById("createRoomBtn").addEventListener("click", createRoom);
 document.getElementById("joinRoomBtn").addEventListener("click", joinRoom);
 quickplayBotBtn.addEventListener("click", createBotRoom);
