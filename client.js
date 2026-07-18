@@ -297,6 +297,7 @@ let announcedWinner = null;
 let previousPlayerTwoConnected = false;
 let previousShowingTokens = false;
 let introTimer = null;
+let introResolve = null;
 let botTurnTimer = null;
 let deckMotionTimer = null;
 let inspectReturnTimer = null;
@@ -2032,11 +2033,12 @@ function turnSignature() {
 
 function showTurnIntroAfterBoardSettles(kind, signature) {
   boardCutsceneQueue = boardCutsceneQueue
+    .catch(() => {})
     .then(() => {
-      if (signature && turnSignature() !== signature) return;
-      showTurnIntro(kind);
-    })
-    .catch(() => {});
+      if (signature && turnSignature() !== signature) return false;
+      return showTurnIntro(kind);
+    });
+  return boardCutsceneQueue;
 }
 
 function canPlaceCard(first, second, third) {
@@ -3036,20 +3038,26 @@ function cancelSelection(game) {
 }
 
 function scheduleOfflineBotTurn() {
-  if (!isOfflineQuickplay() || currentGame()?.current !== 1 || currentGame()?.gameOver) return;
+  const expectedGame = currentGame();
+  const expectedSignature = turnSignature();
+  if (!isOfflineQuickplay() || expectedGame?.current !== 1 || expectedGame?.gameOver) return;
   window.clearTimeout(botTurnTimer);
-  localMessage = `${BOT_NAME} is thinking...`;
-  render();
-  botTurnTimer = window.setTimeout(() => {
-    if (!isOfflineQuickplay() || currentGame()?.current !== 1 || currentGame()?.gameOver) return;
-    const previousSnapshot = structuredClone(snapshot);
-    runBotTurn({ mode: "quickplay", phase: "playing", botSeat: 1, game: currentGame() });
-    refreshLocalPlayerStats();
-    localMessage = "";
-    clearHandFocus();
-    pendingBoardCutscene = { previous: previousSnapshot, next: snapshot };
+  const turnAnnouncement = boardCutsceneQueue.catch(() => {});
+  turnAnnouncement.then(() => {
+    if (!isOfflineQuickplay() || currentGame() !== expectedGame || turnSignature() !== expectedSignature || expectedGame.current !== 1 || expectedGame.gameOver) return;
+    localMessage = `${BOT_NAME} is thinking...`;
     render();
-  }, 520);
+    botTurnTimer = window.setTimeout(() => {
+      if (!isOfflineQuickplay() || currentGame() !== expectedGame || turnSignature() !== expectedSignature || expectedGame.current !== 1 || expectedGame.gameOver) return;
+      const previousSnapshot = structuredClone(snapshot);
+      runBotTurn({ mode: "quickplay", phase: "playing", botSeat: 1, game: expectedGame });
+      refreshLocalPlayerStats();
+      localMessage = "";
+      clearHandFocus();
+      pendingBoardCutscene = { previous: previousSnapshot, next: snapshot };
+      render();
+    }, 650);
+  });
 }
 
 function isBotTurn(room) {
@@ -3865,7 +3873,7 @@ function bindHorizontalWheel(element) {
 
 function showTurnIntro(kind = "match") {
   const game = currentGame();
-  if (!game || !turnIntroOverlay || !turnIntroText || !turnIntroKicker) return;
+  if (!game || !turnIntroOverlay || !turnIntroText || !turnIntroKicker) return Promise.resolve(false);
   const seat = mySeat();
   let text = "The duel begins.";
   let kicker = "Match Begins";
@@ -3900,6 +3908,10 @@ function showTurnIntro(kind = "match") {
   }
 
   window.clearTimeout(introTimer);
+  if (introResolve) {
+    introResolve(false);
+    introResolve = null;
+  }
   turnIntroKicker.textContent = kicker;
   turnIntroText.textContent = text;
   turnIntroOverlay.dataset.tone = tone;
@@ -3907,11 +3919,16 @@ function showTurnIntro(kind = "match") {
   gameShell.classList.add("intro-blur");
   turnIntroOverlay.classList.add("show");
   turnIntroOverlay.setAttribute("aria-hidden", "false");
-  introTimer = window.setTimeout(() => {
-    turnIntroOverlay.classList.remove("show");
-    turnIntroOverlay.setAttribute("aria-hidden", "true");
-    gameShell.classList.remove("intro-blur");
-  }, kind === "turn" ? 2100 : 2400);
+  return new Promise((resolve) => {
+    introResolve = resolve;
+    introTimer = window.setTimeout(() => {
+      turnIntroOverlay.classList.remove("show");
+      turnIntroOverlay.setAttribute("aria-hidden", "true");
+      gameShell.classList.remove("intro-blur");
+      if (introResolve === resolve) introResolve = null;
+      resolve(true);
+    }, kind === "turn" ? 2100 : 2400);
+  });
 }
 
 function renderWin() {
