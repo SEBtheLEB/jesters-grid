@@ -2330,6 +2330,48 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   filter: brightness(1.38) saturate(.78);
 }
 
+.card.cutscene-retained-card {
+  position: fixed;
+  z-index: 410;
+  pointer-events: none;
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+  filter:
+    drop-shadow(0 10px 16px rgba(0, 0, 0, .48))
+    drop-shadow(0 0 8px rgba(247, 217, 135, .16));
+  transition:
+    left 1.7s cubic-bezier(.2, .88, .2, 1),
+    top 1.7s cubic-bezier(.2, .88, .2, 1),
+    transform .3s cubic-bezier(.2, .88, .2, 1),
+    opacity 1.2s ease,
+    filter .3s ease;
+}
+
+.card.cutscene-retained-card.hit {
+  z-index: 425;
+  transform: translate(-50%, -50%) scale(.94) rotate(1deg);
+  filter:
+    brightness(1.5)
+    saturate(.72)
+    drop-shadow(0 0 18px rgba(255, 240, 182, .88))
+    drop-shadow(0 0 24px rgba(255, 86, 108, .56));
+}
+
+.card.cutscene-retained-card.returning {
+  z-index: 425;
+  opacity: 0;
+  transform: translate(-50%, -50%) rotate(9deg) scale(.36);
+  filter:
+    drop-shadow(0 8px 10px rgba(0, 0, 0, .36))
+    drop-shadow(0 0 18px rgba(247, 217, 135, .7));
+  transition:
+    left 1.7s cubic-bezier(.2, .88, .2, 1),
+    top 1.7s cubic-bezier(.2, .88, .2, 1),
+    transform 1.7s cubic-bezier(.2, .88, .2, 1),
+    opacity 1.2s ease,
+    filter 1.2s ease;
+}
+
 .stun-rune-vfx {
   position: fixed;
   z-index: 415;

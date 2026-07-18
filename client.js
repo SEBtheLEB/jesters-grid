@@ -1380,6 +1380,15 @@ function boardCardHtml(card) {
   `;
 }
 
+function boardTokenStripHtml(tokens = []) {
+  if (!tokens.length) return "";
+  return `
+    <div class="token-strip">
+      ${tokens.map((token) => `<span class="mini-token">${TOKEN_TYPES.find((item) => item.id === token.type)?.icon || "?"}</span>`).join("")}
+    </div>
+  `;
+}
+
 function cardTravelStart(owner) {
   const isMine = owner - 1 === mySeat();
   const source = isMine ? handEl : document.querySelector(".opponent-panel");
@@ -1484,6 +1493,35 @@ function spawnRemovedCardEcho(index, card) {
   return echo;
 }
 
+function retainShotTarget(event) {
+  if (!event?.removedCard || event.parried || event.retainedTarget?.isConnected) return event?.retainedTarget || null;
+  const center = tileCenter(event.to);
+  if (!center) return null;
+  const retained = document.createElement("div");
+  retained.className = `card cutscene-retained-card p${event.removedCard.owner}-card card-v${event.removedCard.value}`;
+  retained.style.left = `${center.x}px`;
+  retained.style.top = `${center.y}px`;
+  retained.style.width = `${Math.max(44, center.rect.width * 0.78)}px`;
+  retained.style.height = `${Math.max(52, center.rect.height * 0.84)}px`;
+  retained.innerHTML = `${boardCardHtml(event.removedCard)}${boardTokenStripHtml(event.returnedTokens)}`;
+  document.body.appendChild(retained);
+  event.retainedTarget = retained;
+  return retained;
+}
+
+function prepareBoardCutsceneVisuals(events) {
+  events.forEach((event) => {
+    if (event.type === "shot") retainShotTarget(event);
+  });
+}
+
+function clearBoardCutsceneVisuals(events) {
+  events.forEach((event) => {
+    event.retainedTarget?.remove();
+    event.retainedTarget = null;
+  });
+}
+
 function spawnReturningCardEcho(index, card, order = 0) {
   const center = tileCenter(index);
   if (!center || !card) return;
@@ -1546,7 +1584,6 @@ function fireShotVfx(fromIndex, toIndex) {
   shot.style.width = `${distance}px`;
   shot.style.transform = `rotate(${angle}deg)`;
   document.body.appendChild(shot);
-  pulseTile(toIndex, "shot-impact", 760);
   boardTimeout(() => shot.remove(), 840);
 }
 
@@ -1635,15 +1672,33 @@ async function playShotVfx(event) {
   pulseTile(event.from, "shooter-cutscene", 720);
   await waitForCutscene(280);
   fireShotVfx(event.from, event.to);
-  await waitForCutscene(520);
+  await waitForCutscene(760);
+  pulseTile(event.to, "shot-impact", 760);
   if (event.parried) {
     pulseTile(event.to, "parry-cutscene", 760);
     await waitForCutscene(620);
     return;
   }
-  if (event.removedCard) spawnRemovedCardEcho(event.to, event.removedCard);
-  await waitForCutscene(520);
-  await playReturnsVfx(event.to, event.removedCard ? [event.removedCard] : [], event.returnedTokens || []);
+  const retainedTarget = event.retainedTarget?.isConnected ? event.retainedTarget : null;
+  const removedEcho = retainedTarget || (event.removedCard ? spawnRemovedCardEcho(event.to, event.removedCard) : null);
+  removedEcho?.classList.add("hit");
+  await waitForCutscene(300);
+
+  if (!retainedTarget) {
+    await playReturnsVfx(event.to, event.removedCard ? [event.removedCard] : [], event.returnedTokens || []);
+    return;
+  }
+
+  retainedTarget.querySelector(".token-strip")?.remove();
+  retainedTarget.classList.remove("hit");
+  const returnTarget = pieceReturnTarget(event.removedCard.owner, "card");
+  retainedTarget.classList.add("returning");
+  retainedTarget.style.left = `${returnTarget.x}px`;
+  retainedTarget.style.top = `${returnTarget.y}px`;
+  (event.returnedTokens || []).forEach((token, order) => spawnReturningTokenEcho(event.to, token, order));
+  await waitForCutscene(980 + (event.returnedTokens || []).length * 90);
+  retainedTarget.remove();
+  event.retainedTarget = null;
 }
 
 function topKeyFromGame(game, index) {
@@ -1847,6 +1902,7 @@ async function playBoardCutscenes(events) {
       }
     }
   } finally {
+    clearBoardCutsceneVisuals(events);
     setBoardCutsceneActive(false);
   }
 }
@@ -1856,6 +1912,7 @@ function flushBoardCutscenes() {
   const events = detectBoardCutscenes(pendingBoardCutscene.previous, pendingBoardCutscene.next);
   pendingBoardCutscene = null;
   if (!events.length) return;
+  prepareBoardCutsceneVisuals(events);
   boardCutsceneQueue = boardCutsceneQueue
     .then(() => playBoardCutscenes(events))
     .catch(() => {});
