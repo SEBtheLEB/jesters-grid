@@ -6149,3 +6149,789 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
     animation: none !important;
   }
 }
+
+/* Layered gameplay skin. Generated PNGs provide the painted surfaces while all
+   match data, cards, controls, states, and interactions remain live HTML. */
+#gameScreen.active {
+  padding:
+    max(5px, env(safe-area-inset-top, 0px))
+    clamp(5px, 1.5vw, 7px)
+    max(5px, env(safe-area-inset-bottom, 0px));
+  background:
+    radial-gradient(circle at 18% 30%, rgba(166, 58, 46, .08), transparent 27%),
+    radial-gradient(circle at 82% 68%, rgba(36, 85, 138, .09), transparent 30%);
+}
+
+#gameScreen .game-shell {
+  grid-template-rows:
+    auto
+    auto
+    auto
+    minmax(135px, 1fr)
+    clamp(40px, 5.4svh, 48px);
+  gap: clamp(4px, .65svh, 6px);
+  overflow: visible;
+}
+
+#gameScreen .fantasy-panel::before {
+  display: none;
+}
+
+#gameScreen .top-hud {
+  grid-template-rows: auto auto auto;
+  gap: 3px;
+}
+
+#gameScreen .match-header {
+  min-height: clamp(34px, 4.5svh, 40px);
+  grid-template-columns: clamp(36px, 9.8vw, 43px) minmax(0, 1fr) clamp(36px, 9.8vw, 43px);
+  gap: clamp(4px, 1.3vw, 7px);
+}
+
+#gameScreen .icon-medallion,
+#gameScreen .settings-button {
+  width: clamp(36px, 9.8vw, 43px);
+  height: clamp(34px, 4.5svh, 40px);
+  min-width: 0;
+  padding: 0;
+  color: #e9cb91;
+  border: 0;
+  border-radius: 50%;
+  background:
+    url("/assets/ui/generated/round-button-frame.png") center / contain no-repeat;
+  box-shadow: none;
+  filter: drop-shadow(0 4px 4px rgba(0, 0, 0, .36));
+  font-family: "Segoe Print", "Bradley Hand", "Trebuchet MS", sans-serif;
+  font-size: clamp(6px, 1.65vw, 8px);
+  letter-spacing: 0;
+  transition: transform .28s cubic-bezier(.17, .89, .28, 1.35), filter .2s ease;
+}
+
+#gameScreen .icon-medallion:hover,
+#gameScreen .settings-button:hover,
+#gameScreen .icon-medallion:focus-visible,
+#gameScreen .settings-button:focus-visible {
+  outline: 0;
+  filter: brightness(1.12) drop-shadow(0 6px 5px rgba(0, 0, 0, .42));
+  transform: translateY(-2px) rotate(-2deg);
+}
+
+#gameScreen .title-frame {
+  height: 100%;
+  padding: 0 clamp(18px, 5vw, 25px);
+  border: 0;
+  border-radius: 0;
+  background-image: var(--skin-title-frame);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  box-shadow: none;
+  filter: drop-shadow(0 4px 4px rgba(0, 0, 0, .32));
+}
+
+#gameScreen .title-frame::before,
+#gameScreen .title-frame::after {
+  display: none;
+}
+
+#gameScreen .match-title {
+  color: #e7ca93;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(16px, 4.6vw, 22px);
+  line-height: 1;
+  letter-spacing: 0;
+  text-shadow: 0 2px 0 #17100d;
+}
+
+#gameScreen .room-strip {
+  min-height: clamp(22px, 2.9svh, 26px);
+  padding: 3px clamp(10px, 3vw, 15px);
+  border: 0;
+  border-radius: 0;
+  background-image: var(--skin-hud-strip);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  box-shadow: none;
+  filter: drop-shadow(0 3px 3px rgba(0, 0, 0, .3));
+  color: #e4c58e;
+  font-family: "Segoe Print", "Bradley Hand", "Trebuchet MS", sans-serif;
+  font-size: clamp(7px, 2vw, 9px);
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+#gameScreen .room-strip span:nth-child(2) {
+  color: #e4c58e;
+}
+
+#gameScreen .duelist-bar {
+  min-height: clamp(50px, 7svh, 62px);
+  gap: clamp(3px, 1vw, 5px);
+}
+
+#gameScreen .opponent-panel,
+#gameScreen .player-panel {
+  min-height: clamp(50px, 7svh, 62px);
+  grid-template-columns: clamp(29px, 8vw, 36px) minmax(0, 1fr);
+  gap: clamp(4px, 1.1vw, 6px);
+  padding: clamp(6px, .8svh, 8px) clamp(8px, 2.2vw, 11px);
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background-image: var(--skin-panel-frame);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  box-shadow: none;
+  filter: drop-shadow(0 4px 4px rgba(0, 0, 0, .32));
+}
+
+#gameScreen .player-panel {
+  opacity: 1;
+}
+
+#gameScreen .avatar-frame {
+  width: clamp(29px, 8vw, 36px);
+  height: clamp(29px, 8vw, 36px);
+  border-width: 1px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, .32);
+}
+
+#gameScreen .identity-name {
+  color: #e9cf9a;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(11px, 3vw, 14px);
+  line-height: 1;
+}
+
+#gameScreen .identity-title {
+  color: #a8b8c8;
+  font-family: "Segoe Print", "Bradley Hand", "Trebuchet MS", sans-serif;
+  font-size: clamp(5.8px, 1.65vw, 7.5px);
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+#gameScreen .stat-line,
+#gameScreen .player-meters {
+  margin-top: 2px;
+  gap: 3px;
+  color: #dfbd7e;
+  font-family: "Segoe Print", "Bradley Hand", "Trebuchet MS", sans-serif;
+  font-size: clamp(6.2px, 1.75vw, 8px);
+  line-height: 1;
+}
+
+#gameScreen .resource-chip {
+  right: 9px;
+  top: 7px;
+  min-width: 31px;
+  height: 14px;
+  padding: 0 3px;
+  color: #dfbd7e;
+  border: 0;
+  background: transparent;
+  font-family: "Segoe Print", "Bradley Hand", "Trebuchet MS", sans-serif;
+  font-size: 6px;
+}
+
+#gameScreen .message-bar {
+  z-index: 5;
+  min-height: clamp(36px, 4.8svh, 44px);
+  max-height: none;
+  padding: 7px clamp(61px, 16vw, 70px) 7px clamp(29px, 8vw, 36px);
+  overflow: visible;
+  color: #17191c;
+  border: 0;
+  border-radius: 0;
+  background-image: var(--skin-message-scroll);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  box-shadow: none;
+  filter: drop-shadow(0 5px 4px rgba(0, 0, 0, .32));
+  font-family: "Segoe Print", "Bradley Hand", "Trebuchet MS", sans-serif;
+  font-size: clamp(8px, 2.25vw, 10.5px);
+  font-weight: 800;
+  line-height: 1.14;
+  text-shadow: none;
+}
+
+#gameScreen .message-bar::before {
+  display: none;
+}
+
+#gameScreen .message-bar::after {
+  content: "";
+  position: absolute;
+  right: clamp(4px, 1.2vw, 7px);
+  bottom: -5px;
+  top: auto;
+  z-index: 3;
+  width: clamp(52px, 14vw, 62px);
+  height: clamp(58px, 15.8vw, 70px);
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  background-image: var(--skin-companion);
+  background-position: center bottom;
+  background-repeat: no-repeat;
+  background-size: contain;
+  box-shadow: none;
+  transform: none;
+  pointer-events: none;
+  animation: companionNod 4.8s ease-in-out infinite;
+  transform-origin: center bottom;
+}
+
+#gameScreen .board-frame {
+  justify-self: center;
+  width: min(100%, 45svh, 404px);
+  height: auto;
+  min-height: 0;
+  aspect-ratio: 1000 / 1036;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background-image: var(--skin-board-frame);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  box-shadow: none;
+  filter: drop-shadow(0 8px 6px rgba(0, 0, 0, .42));
+}
+
+#gameScreen .board-frame::before,
+#gameScreen .board-frame::after {
+  display: none;
+}
+
+#gameScreen .board-wrap {
+  width: 100%;
+  height: 100%;
+}
+
+#gameScreen .board {
+  width: 86.5%;
+  max-width: 86.5%;
+  max-height: 86.5%;
+  gap: clamp(3px, .9vw, 5px);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+#gameScreen .tile {
+  overflow: visible;
+  border: 0;
+  border-radius: 8%;
+  background-image: var(--skin-tile-empty);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, .26);
+  transition: transform .24s cubic-bezier(.17, .89, .28, 1.35), filter .2s ease, box-shadow .2s ease;
+}
+
+#gameScreen .tile::before,
+#gameScreen .tile::after {
+  display: none;
+}
+
+#gameScreen .tile.selectable,
+#gameScreen .tile.drag-selectable {
+  outline: 2px solid rgba(223, 185, 112, .8);
+  outline-offset: -3px;
+}
+
+#gameScreen .tile.drag-hover,
+#gameScreen .tile.is-holding {
+  outline: 2px solid #f2d89d;
+  outline-offset: -2px;
+  transform: translateY(-2px) scale(1.035);
+}
+
+#gameScreen .card {
+  width: 74%;
+  height: 91%;
+  padding: 4px 3px 3px;
+  border-radius: 6px;
+  background-size: 100% 100%, auto, auto, auto;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+#gameScreen .card-art,
+#gameScreen .hand-art {
+  border: 0;
+  background-color: transparent;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain, auto, auto, auto;
+}
+
+#gameScreen .card-art::before,
+#gameScreen .hand-art::before {
+  display: none;
+}
+#gameScreen .card-v1 .card-art,
+#gameScreen .card-v1 .hand-art { background-image: var(--skin-card-art-1), radial-gradient(circle at 50% 35%, rgba(255, 246, 209, .08), transparent 44%); }
+
+#gameScreen .card-v2 .card-art,
+#gameScreen .card-v2 .hand-art { background-image: var(--skin-card-art-2), radial-gradient(circle at 50% 35%, rgba(255, 246, 209, .08), transparent 44%); }
+
+#gameScreen .card-v3 .card-art,
+#gameScreen .card-v3 .hand-art { background-image: var(--skin-card-art-3), radial-gradient(circle at 50% 35%, rgba(255, 246, 209, .08), transparent 44%); }
+
+#gameScreen .card-v4 .card-art,
+#gameScreen .card-v4 .hand-art { background-image: var(--skin-card-art-4), radial-gradient(circle at 50% 35%, rgba(255, 246, 209, .08), transparent 44%); }
+
+#gameScreen .card-v5 .card-art,
+#gameScreen .card-v5 .hand-art { background-image: var(--skin-card-art-5), radial-gradient(circle at 50% 35%, rgba(255, 246, 209, .08), transparent 44%); }
+
+#gameScreen .card-v6 .card-art,
+#gameScreen .card-v6 .hand-art { background-image: var(--skin-card-art-6), radial-gradient(circle at 50% 35%, rgba(255, 246, 209, .08), transparent 44%); }
+
+#gameScreen .card-v7 .card-art,
+#gameScreen .card-v7 .hand-art { background-image: var(--skin-card-art-7), radial-gradient(circle at 50% 35%, rgba(255, 246, 209, .08), transparent 44%); }
+
+#gameScreen .card-v8 .card-art,
+#gameScreen .card-v8 .hand-art { background-image: var(--skin-card-art-8), radial-gradient(circle at 50% 35%, rgba(255, 246, 209, .08), transparent 44%); }
+
+#gameScreen .card-v9 .card-art,
+#gameScreen .card-v9 .hand-art { background-image: var(--skin-card-art-9), radial-gradient(circle at 50% 35%, rgba(255, 246, 209, .08), transparent 44%); }
+
+#gameScreen .card-v10 .card-art,
+#gameScreen .card-v10 .hand-art { background-image: var(--skin-card-art-10), radial-gradient(circle at 50% 35%, rgba(255, 246, 209, .08), transparent 44%); }
+
+#gameScreen .card-v11 .card-art,
+#gameScreen .card-v11 .hand-art { background-image: var(--skin-card-art-11), radial-gradient(circle at 50% 35%, rgba(255, 246, 209, .08), transparent 44%); }
+
+#gameScreen .card-v12 .card-art,
+#gameScreen .card-v12 .hand-art { background-image: var(--skin-card-art-12), radial-gradient(circle at 50% 35%, rgba(255, 246, 209, .08), transparent 44%); }
+
+#gameScreen .card-v13 .card-art,
+#gameScreen .card-v13 .hand-art { background-image: var(--skin-card-art-13), radial-gradient(circle at 50% 35%, rgba(255, 246, 209, .08), transparent 44%); }
+
+#gameScreen .card-v14 .card-art,
+#gameScreen .card-v14 .hand-art { background-image: var(--skin-card-art-14), radial-gradient(circle at 50% 35%, rgba(255, 246, 209, .08), transparent 44%); }
+
+#gameScreen .card-name {
+  color: #e4c58e;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(5.5px, 1.5vw, 7.5px);
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+#gameScreen .card .power-badge {
+  top: 3px;
+  left: 3px;
+  min-width: clamp(17px, 4.6vw, 21px);
+  height: clamp(17px, 4.6vw, 21px);
+  color: #1b1a18;
+  border: 1px solid #bd8c3d;
+  background: #e4c58e;
+  font-size: clamp(9px, 2.5vw, 12px);
+}
+
+#gameScreen .card .suit-badge {
+  top: 4px;
+  right: 4px;
+  font-size: 5px;
+}
+
+#gameScreen .hand-panel {
+  z-index: 40;
+  min-height: 135px;
+  grid-template-rows: 23px minmax(0, 1fr);
+  gap: 2px;
+  padding: 0 2px;
+  border-top: 1px solid rgba(201, 154, 62, .28);
+  background:
+    radial-gradient(circle at 18% 62%, rgba(36, 85, 138, .13), transparent 30%),
+    radial-gradient(circle at 82% 60%, rgba(166, 58, 46, .13), transparent 30%),
+    repeating-linear-gradient(7deg, rgba(255, 255, 255, .012) 0 1px, transparent 1px 5px);
+}
+
+#gameScreen .section-label {
+  z-index: 0;
+  min-height: 22px;
+  padding: 0 5px;
+  color: #9eb2c8;
+  font-family: "Segoe Print", "Bradley Hand", "Trebuchet MS", sans-serif;
+  font-size: clamp(8px, 2.3vw, 10.5px);
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+#gameScreen .section-label::before {
+  inset: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+#gameScreen #turnLabel {
+  color: #c85842;
+}
+
+#gameScreen .hand-stage,
+#gameScreen .hand-scroll,
+#gameScreen .hand {
+  z-index: 4;
+}
+
+#gameScreen .hand::before {
+  bottom: 0;
+  height: 24px;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, .58), transparent 68%);
+}
+
+#gameScreen .hand-card {
+  top: 47%;
+  width: clamp(82px, 23.5vw, 104px);
+  height: clamp(122px, 16.8svh, 146px);
+  grid-template-rows: minmax(48px, 1fr) auto minmax(24px, auto);
+  padding: 7px 7px 8px;
+  overflow: visible;
+  border-radius: 6px;
+  color: #e5ca96;
+  background-size: 100% 100%, auto, auto, auto;
+  background-position: center;
+  background-repeat: no-repeat;
+  box-shadow: 0 7px 10px rgba(0, 0, 0, .4);
+  transition:
+    transform .5s cubic-bezier(.17, .89, .28, 1.15),
+    left .5s cubic-bezier(.17, .89, .28, 1.15),
+    box-shadow .24s ease,
+    filter .24s ease,
+    opacity .24s ease;
+}
+
+#gameScreen .hand.deck-expanded .hand-card {
+  --deck-scale: 1;
+  transition-duration: .5s, .5s, .24s, .24s, .24s;
+}
+
+#gameScreen .hand-card::before {
+  display: none;
+}
+
+#gameScreen .hand-card .hand-art {
+  min-height: 46px;
+  margin: 24px 7px 0;
+}
+
+#gameScreen .hand-card .hand-name {
+  min-width: 0;
+  min-height: 12px;
+  margin: 0 4px;
+  padding: 2px 3px 1px;
+  color: #17191c;
+  border: 1px solid rgba(92, 59, 27, .42);
+  border-radius: 2px;
+  background: #e1c48d;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(7.5px, 2.05vw, 9.5px);
+  line-height: 1;
+  letter-spacing: 0;
+  text-shadow: none;
+}
+
+#gameScreen .hand-card .hand-rules {
+  min-height: 22px;
+  max-height: 29px;
+  padding: 2px 4px 0;
+  color: #dfc18a;
+  font-family: "Segoe Print", "Bradley Hand", "Trebuchet MS", sans-serif;
+  font-size: clamp(5.6px, 1.55vw, 7px);
+  font-weight: 700;
+  line-height: 1.08;
+}
+
+#gameScreen .hand-card .power-badge {
+  top: 7px;
+  left: 7px;
+  min-width: clamp(23px, 6.2vw, 28px);
+  height: clamp(23px, 6.2vw, 28px);
+  color: #17191c;
+  border: 1px solid #bd8c3d;
+  background: #e4c58e;
+  box-shadow: 0 2px 3px rgba(0, 0, 0, .3);
+  font-size: clamp(12px, 3.2vw, 16px);
+}
+
+#gameScreen .hand-card .suit-badge {
+  top: 9px;
+  right: 9px;
+  color: #d5a54d;
+  font-family: "Segoe Print", "Bradley Hand", "Trebuchet MS", sans-serif;
+  font-size: 6px;
+}
+
+#gameScreen .hand-card.selected,
+#gameScreen .hand-card.held-card {
+  filter: brightness(1.08);
+  box-shadow: 0 0 0 2px #e0b862, 0 0 21px rgba(224, 184, 98, .42), 0 12px 18px rgba(0, 0, 0, .48);
+}
+
+#gameScreen .hand-panel.tokens-expanded .hand {
+  --hand-offset: -30px;
+}
+
+#gameScreen .hand-card.inspected {
+  top: 46%;
+  width: min(78vw, 304px);
+  height: min(54svh, 438px);
+  max-height: min(54svh, 438px);
+  grid-template-rows: minmax(150px, 1fr) auto minmax(116px, auto);
+  padding: 16px 18px 20px;
+}
+
+#gameScreen .hand-card.inspected .hand-art {
+  min-height: 140px;
+  margin: 42px 22px 4px;
+}
+
+#gameScreen .hand-card.inspected .hand-name {
+  padding-top: 4px;
+  font-size: clamp(16px, 4.4vw, 20px);
+}
+
+#gameScreen .hand-card.inspected .hand-rules {
+  padding: 9px 15px 4px;
+  color: #e6c98e;
+  font-size: clamp(10px, 2.8vw, 13px);
+  line-height: 1.18;
+}
+
+#gameScreen .token-dock {
+  right: 4px;
+  bottom: 5px;
+  width: 66px;
+  height: 80px;
+}
+
+#gameScreen .token-toggle {
+  width: 54px;
+  min-width: 54px;
+  height: 58px;
+  min-height: 58px;
+  margin: 20px 0 0 10px;
+  border: 0;
+  border-radius: 0;
+  background-image: var(--skin-token-bard);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  box-shadow: none;
+  filter: drop-shadow(0 6px 5px rgba(0, 0, 0, .38));
+}
+
+#gameScreen .token-toggle.is-open,
+#gameScreen .token-toggle[aria-pressed="true"] {
+  background-image: var(--skin-token-bard);
+  background-color: transparent;
+  filter: brightness(1.08) drop-shadow(0 7px 6px rgba(0, 0, 0, .44));
+}
+
+#gameScreen .pouch-ornament {
+  display: none;
+}
+
+#gameScreen .pouch-title {
+  bottom: -5px;
+  color: #e2c58c;
+  font-family: "Segoe Print", "Bradley Hand", "Trebuchet MS", sans-serif;
+  font-size: 6px;
+  letter-spacing: 0;
+}
+
+#gameScreen .pouch-count {
+  top: 0;
+  right: -1px;
+  color: #17191c;
+  border-color: #b98232;
+  background: #e4c58e;
+  font-size: 7px;
+}
+
+#gameScreen .token-button {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+#gameScreen .token-button .token-icon {
+  width: 34px;
+  height: 39px;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  background-size: contain, auto, auto;
+  color: #f1d29a;
+  filter: drop-shadow(0 4px 3px rgba(0, 0, 0, .35));
+  font-size: 13px;
+}
+
+#gameScreen .player-actions {
+  min-height: 40px;
+  gap: clamp(4px, 1.2vw, 7px);
+  overflow: visible;
+}
+
+#gameScreen .action-button {
+  min-height: 40px;
+  padding: 0 clamp(18px, 5vw, 26px);
+  overflow: visible;
+  color: #e9cc94;
+  border: 0;
+  border-radius: 0;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%, auto, auto;
+  box-shadow: none;
+  filter: drop-shadow(0 5px 4px rgba(0, 0, 0, .34));
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(13px, 3.7vw, 18px);
+  line-height: 1;
+  letter-spacing: 0;
+  text-shadow: 0 1px 0 #21110c;
+  transition: transform .3s cubic-bezier(.17, .89, .28, 1.35), filter .2s ease;
+}
+
+#gameScreen .action-button:not(:disabled):hover,
+#gameScreen .action-button:not(:disabled):focus-visible {
+  outline: 0;
+  filter: brightness(1.1) drop-shadow(0 7px 5px rgba(0, 0, 0, .4));
+  transform: translateY(-2px) scale(1.012);
+}
+
+#gameScreen .action-button:disabled {
+  opacity: .55;
+  filter: grayscale(.25) brightness(.72);
+}
+
+#gameScreen .settings-menu {
+  top: 44px;
+  right: 3px;
+  width: min(190px, calc(100% - 6px));
+  border-color: #c99a3e;
+  border-radius: 5px;
+  background:
+    repeating-linear-gradient(8deg, rgba(49, 33, 16, .045) 0 1px, transparent 1px 5px),
+    #e2c58f;
+  box-shadow: 0 15px 28px rgba(0, 0, 0, .55);
+}
+
+#gameScreen .settings-item {
+  min-height: 34px;
+  color: #17191c;
+  border-color: rgba(41, 28, 16, .35);
+  background: rgba(255, 244, 211, .24);
+  font-family: "Segoe Print", "Bradley Hand", "Trebuchet MS", sans-serif;
+  font-size: 9px;
+  letter-spacing: 0;
+}
+
+#gameScreen .turn-intro-card,
+.turn-intro-card {
+  border: 0;
+  border-radius: 0;
+  background-image: var(--skin-message-scroll);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  box-shadow: none;
+  color: #17191c;
+  filter: drop-shadow(0 12px 18px rgba(0, 0, 0, .48));
+}
+
+.turn-intro-card span,
+.turn-intro-card strong {
+  color: #17191c;
+  font-family: "Segoe Print", "Bradley Hand", "Trebuchet MS", sans-serif;
+  letter-spacing: 0;
+  text-shadow: none;
+}
+
+@keyframes companionNod {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  48% { transform: translateY(-2px) rotate(1.5deg); }
+}
+
+@media (max-height: 760px) {
+  #gameScreen.active {
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+
+  #gameScreen .game-shell {
+    grid-template-rows: auto auto auto minmax(124px, 1fr) 38px;
+    gap: 3px;
+  }
+
+  #gameScreen .match-header {
+    min-height: 32px;
+  }
+
+  #gameScreen .icon-medallion,
+  #gameScreen .settings-button {
+    width: 34px;
+    height: 32px;
+  }
+
+  #gameScreen .room-strip {
+    min-height: 20px;
+  }
+
+  #gameScreen .duelist-bar,
+  #gameScreen .opponent-panel,
+  #gameScreen .player-panel {
+    min-height: 47px;
+  }
+
+  #gameScreen .opponent-panel,
+  #gameScreen .player-panel {
+    padding-block: 5px;
+  }
+
+  #gameScreen .message-bar {
+    min-height: 34px;
+  }
+
+  #gameScreen .board-frame {
+    width: min(100%, 45svh, 344px);
+  }
+
+  #gameScreen .hand-panel {
+    min-height: 124px;
+  }
+
+  #gameScreen .hand-card {
+    top: 45%;
+    width: clamp(77px, 22.5vw, 94px);
+    height: clamp(112px, 16svh, 126px);
+  }
+
+  #gameScreen .hand-card .hand-art {
+    min-height: 38px;
+    margin-top: 21px;
+  }
+
+  #gameScreen .player-actions,
+  #gameScreen .action-button {
+    min-height: 38px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #gameScreen .message-bar::after {
+    animation: none;
+  }
+}
