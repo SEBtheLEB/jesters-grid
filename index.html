@@ -8,13 +8,14 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/icon.svg" />
-  <link rel="stylesheet" href="/styles.css?v=28" />
+  <link rel="stylesheet" href="/styles.css?v=29" />
   <link rel="stylesheet" href="/assets/skins/default/skin.css?v=23" />
 </head>
 <body data-theme="dark">
   <main class="phone">
     <section id="menuScreen" class="screen active home-screen">
       <div class="menu-content home-shell">
+        <div class="home-menu-stack">
         <div class="home-corner-bar" aria-label="Home shortcuts">
           <button id="newsBtn" class="home-corner-button icon-button asset-slot fallback-frame card-hover" data-menu-action="news" data-asset-bg="bottomButtonFrame" type="button" aria-label="News">
             <span class="ui-icon news-icon asset-slot" data-asset-bg="newsIcon" aria-hidden="true"></span>
@@ -132,45 +133,53 @@
           <button class="home-icon-button tap-bounce" data-menu-action="profile" type="button" aria-label="Profile"><span>Profile</span></button>
           <button class="home-icon-button tap-bounce" data-menu-action="exit" type="button" aria-label="Exit"><span>Exit</span></button>
         </nav>
-
-        <section id="playDrawer" class="home-play-panel fantasy-panel" aria-label="Play options">
-          <nav class="menu-tabs" aria-label="Play mode">
-            <button id="roomTabBtn" class="menu-tab active" type="button" role="tab" aria-selected="true" aria-controls="roomTabPanel">Room Multiplayer</button>
-            <button id="quickplayTabBtn" class="menu-tab" type="button" role="tab" aria-selected="false" aria-controls="quickplayTabPanel">Quickplay Bot</button>
-          </nav>
-
-          <div id="roomTabPanel" class="menu-tab-panel active" role="tabpanel" aria-labelledby="roomTabBtn">
-            <div class="lobby-panel">
-              <button class="big-button" id="createRoomBtn">Create Duel</button>
-              <div class="join-row">
-                <input id="roomCodeInput" class="text-input" maxlength="6" placeholder="CODE" autocomplete="off" />
-                <button class="small-button" id="joinRoomBtn">Join</button>
-              </div>
-            </div>
-          </div>
-
-          <div id="quickplayTabPanel" class="menu-tab-panel" role="tabpanel" aria-labelledby="quickplayTabBtn">
-            <div class="quickplay-panel">
-              <div class="bot-card">
-                <div class="bot-avatar" aria-hidden="true">CJ</div>
-                <div class="bot-copy">
-                  <span>Quickplay Rival</span>
-                  <strong>Clockwork Jester</strong>
-                  <em>Gilded Automaton Rank</em>
-                </div>
-              </div>
-              <button class="big-button" id="quickplayBotBtn">Play Bot Duel</button>
-            </div>
-          </div>
-
-          <p id="menuStatus" class="status-copy home-status">Tap Online or Solo Mode to choose a duel.</p>
-          <div class="menu-actions">
-            <button class="small-button" id="rulesBtn">Rules</button>
-            <button class="small-button red" id="resetBtn">New Match</button>
-          </div>
-        </section>
+        </div>
 
         <div id="menuToast" class="menu-toast" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <section id="onlineScreen" class="screen online-screen">
+      <div class="online-shell">
+        <header class="online-header">
+          <button id="onlineBackBtn" class="online-back-button" type="button" aria-label="Back to main menu">Back</button>
+          <div class="online-heading">
+            <span>Private Court</span>
+            <h1>Online Duel</h1>
+          </div>
+          <span class="online-header-ornament" aria-hidden="true">&#10022;</span>
+        </header>
+
+        <div class="online-character-banner" aria-hidden="true">
+          <img src="/assets/ui/jgrid-menu-reference-v2.png" alt="" />
+        </div>
+
+        <section class="online-choice-panel" aria-label="Online duel options">
+          <button class="online-choice-card create-choice" id="createRoomBtn" type="button">
+            <span class="online-choice-kicker">Open a private court</span>
+            <strong>Create Duel</strong>
+            <span>Get a room code to share with another player.</span>
+          </button>
+
+          <button class="online-choice-card join-choice" id="onlineJoinRevealBtn" type="button" aria-expanded="false" aria-controls="onlineJoinForm">
+            <span class="online-choice-kicker">Enter an invitation</span>
+            <strong>Join Duel</strong>
+            <span>Use the five-character code from your opponent.</span>
+          </button>
+
+          <div id="onlineJoinForm" class="online-join-form" aria-hidden="true">
+            <label for="roomCodeInput">Room Code</label>
+            <div class="online-code-row">
+              <input id="roomCodeInput" class="online-code-input" maxlength="6" placeholder="CODE" autocomplete="off" inputmode="text" />
+              <button class="online-join-submit" id="joinRoomBtn" type="button">Join</button>
+            </div>
+          </div>
+
+          <p id="menuStatus" class="online-status" aria-live="polite">Choose how you want to enter the court.</p>
+        </section>
+
+        <button class="online-rules-button" id="rulesBtn" type="button">Rules</button>
+        <button class="visually-hidden" id="resetBtn" type="button" tabindex="-1">New Match</button>
       </div>
     </section>
 
@@ -352,6 +361,6 @@
     </div>
   </main>
 
-  <script src="/client.js?v=28"></script>
+  <script src="/client.js?v=29"></script>
 </body>
 </html>

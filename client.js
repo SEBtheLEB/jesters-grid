@@ -199,6 +199,7 @@ const clientId = getClientId();
 const ACTIVE_ROOM_KEY = "jg-active-room-v1";
 const screens = {
   menu: document.getElementById("menuScreen"),
+  online: document.getElementById("onlineScreen"),
   game: document.getElementById("gameScreen"),
   rules: document.getElementById("rulesScreen")
 };
@@ -236,13 +237,10 @@ const tokenPanelBtn = document.getElementById("tokenPanelBtn");
 const playerNameInput = document.getElementById("playerName");
 const roomCodeInput = document.getElementById("roomCodeInput");
 const menuStatus = document.getElementById("menuStatus");
-const roomTabBtn = document.getElementById("roomTabBtn");
-const quickplayTabBtn = document.getElementById("quickplayTabBtn");
-const roomTabPanel = document.getElementById("roomTabPanel");
-const quickplayTabPanel = document.getElementById("quickplayTabPanel");
-const quickplayBotBtn = document.getElementById("quickplayBotBtn");
-const playDrawer = document.getElementById("playDrawer");
 const menuToast = document.getElementById("menuToast");
+const onlineBackBtn = document.getElementById("onlineBackBtn");
+const onlineJoinRevealBtn = document.getElementById("onlineJoinRevealBtn");
+const onlineJoinForm = document.getElementById("onlineJoinForm");
 
 let snapshot = null;
 let selectedCardIndex = null;
@@ -283,6 +281,7 @@ let boardCutsceneMessage = "";
 let notificationRegistrationInFlight = false;
 let lastNotificationRegistrationKey = "";
 let roomNotificationPermissionPromise = null;
+let rulesReturnScreen = "menu";
 
 const DECK_CARD_LAYOUTS = [
   { x: -46, y: -22, r: -8, openX: -90, openY: -42, openR: -9, z: 2 },
@@ -359,12 +358,12 @@ else if (savedRoomSession()?.code) roomCodeInput.value = savedRoomSession().code
 
 function showScreen(name) {
   Object.values(screens).forEach((screen) => screen.classList.remove("active"));
-  screens[name].classList.add("active");
+  screens[name]?.classList.add("active");
   settingsMenu.classList.remove("open");
 }
 
 function setMenuStatus(text) {
-  menuStatus.textContent = text;
+  if (menuStatus) menuStatus.textContent = text;
 }
 
 function setMenuRequestBusy(busy, message = "") {
@@ -376,15 +375,16 @@ function setMenuRequestBusy(busy, message = "") {
   if (message) setMenuStatus(message);
 }
 
-function showMenuTab(tab) {
-  const quickplay = tab === "quickplay";
-  roomTabBtn.classList.toggle("active", !quickplay);
-  quickplayTabBtn.classList.toggle("active", quickplay);
-  roomTabBtn.setAttribute("aria-selected", String(!quickplay));
-  quickplayTabBtn.setAttribute("aria-selected", String(quickplay));
-  roomTabPanel.classList.toggle("active", !quickplay);
-  quickplayTabPanel.classList.toggle("active", quickplay);
-  setMenuStatus(quickplay ? "Quickplay starts a solo bot duel." : "Connect to start a 1v1 room.");
+function setOnlineJoinOpen(open) {
+  onlineJoinForm?.classList.toggle("open", open);
+  onlineJoinForm?.setAttribute("aria-hidden", String(!open));
+  onlineJoinRevealBtn?.setAttribute("aria-expanded", String(open));
+  if (open) {
+    setMenuStatus("Enter the room code, then tap Join.");
+    window.setTimeout(() => roomCodeInput?.focus(), 260);
+  } else {
+    setMenuStatus("Choose how you want to enter the court.");
+  }
 }
 
 function assetValue(key) {
@@ -463,16 +463,13 @@ function handleMenuAction(action, target = null) {
   };
 
   if (action === "play" || action === "online") {
-    playDrawer?.classList.add("open");
-    showMenuTab("room");
-    showMenuToast("Online room options opened.");
+    setOnlineJoinOpen(false);
+    showScreen("online");
     return;
   }
 
   if (action === "solo" || action === "decks") {
-    playDrawer?.classList.add("open");
-    showMenuTab("quickplay");
-    showMenuToast("Solo Mode options opened.");
+    createBotRoom();
     return;
   }
 
@@ -4085,14 +4082,22 @@ document.querySelectorAll("[data-menu-action]").forEach((button) => {
 });
 document.getElementById("createRoomBtn").addEventListener("click", createRoom);
 document.getElementById("joinRoomBtn").addEventListener("click", joinRoom);
-quickplayBotBtn.addEventListener("click", createBotRoom);
-roomTabBtn.addEventListener("click", () => showMenuTab("room"));
-quickplayTabBtn.addEventListener("click", () => showMenuTab("quickplay"));
+onlineBackBtn.addEventListener("click", () => {
+  setOnlineJoinOpen(false);
+  showScreen("menu");
+});
+onlineJoinRevealBtn.addEventListener("click", () => setOnlineJoinOpen(true));
 roomCodeInput.addEventListener("input", () => {
   roomCodeInput.value = roomCodeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
 });
-document.getElementById("rulesBtn").addEventListener("click", () => showScreen("rules"));
-document.getElementById("backRules").addEventListener("click", () => showScreen(snapshot ? "game" : "menu"));
+roomCodeInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") joinRoom();
+});
+document.getElementById("rulesBtn").addEventListener("click", () => {
+  rulesReturnScreen = screens.online.classList.contains("active") ? "online" : "menu";
+  showScreen("rules");
+});
+document.getElementById("backRules").addEventListener("click", () => showScreen(snapshot ? "game" : rulesReturnScreen));
 document.getElementById("backToMenu").addEventListener("click", () => showScreen("menu"));
 waitingBackBtn.addEventListener("click", leaveRoom);
 document.getElementById("resetBtn").addEventListener("click", () => {
