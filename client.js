@@ -1481,7 +1481,6 @@ function tileCenter(index) {
 function boardCardHtml(card, displayValue = card?.value) {
   return `
     <div class="power-badge">${displayValue ?? ""}</div>
-    <div class="suit-badge">P${card?.owner ?? ""}</div>
     <div class="card-art"></div>
     <div class="card-name">${CARD_NAMES[card?.value] || "Card"}</div>
   `;
@@ -1494,6 +1493,14 @@ function boardTokenStripHtml(tokens = []) {
       ${tokens.map((token) => `<span class="mini-token">${TOKEN_TYPES.find((item) => item.id === token.type)?.icon || "?"}</span>`).join("")}
     </div>
   `;
+}
+
+function tuckCoveredBoardCard(event) {
+  const coveredLayer = event?.coveredLayer?.isConnected ? event.coveredLayer : null;
+  if (!coveredLayer) return;
+  coveredLayer.classList.remove("stack-cover-source");
+  coveredLayer.classList.add("stack-tucking");
+  boardTimeout(() => coveredLayer.classList.remove("stack-tucking"), 720);
 }
 
 function cardTravelStart(owner) {
@@ -1518,19 +1525,27 @@ async function playPlacementVfx(event) {
   const target = tileCenter(event.tile);
   if (!target || !event.card) return;
 
-  const finalCard = target.tile.querySelector(".card");
+  const finalCard = event.finalCard?.isConnected ? event.finalCard : target.tile.querySelector(".board-card-top");
   const player = currentGame()?.players?.[event.card.owner - 1];
   const playerName = player?.name || `Player ${event.card.owner}`;
-  setBoardCutsceneMessage(`${playerName} places ${event.card.value} - ${CARD_NAMES[event.card.value]}.`);
+  const coveredName = event.coveredCard ? `${event.coveredCard.value} - ${CARD_NAMES[event.coveredCard.value]}` : "";
+  setBoardCutsceneMessage(event.coveredCard
+    ? `${playerName} stacks ${event.card.value} - ${CARD_NAMES[event.card.value]} over ${coveredName}.`
+    : `${playerName} places ${event.card.value} - ${CARD_NAMES[event.card.value]}.`);
   gameAudio.play("place");
+  finalCard?.classList.add("cutscene-card-pending");
 
   if (event.card.owner - 1 === mySeat()) {
-    pulseTile(event.tile, "placement-impact", 420);
-    await waitForCutscene(250);
+    await waitForCutscene(540);
+    tuckCoveredBoardCard(event);
+    finalCard?.classList.remove("cutscene-card-pending");
+    finalCard?.classList.add("cutscene-card-reveal");
+    pulseTile(event.tile, event.coveredCard ? "stack-settle" : "placement-impact", 760);
+    boardTimeout(() => finalCard?.classList.remove("cutscene-card-reveal"), 760);
+    await waitForCutscene(360);
     return;
   }
 
-  finalCard?.classList.add("cutscene-card-pending");
   const start = cardTravelStart(event.card.owner);
   const ghost = document.createElement("div");
   ghost.className = `card board-card cutscene-placement-card p${event.card.owner}-card card-v${event.card.value}`;
@@ -1548,8 +1563,9 @@ async function playPlacementVfx(event) {
   ghost.style.left = `${target.x}px`;
   ghost.style.top = `${target.y}px`;
   ghost.style.transform = "translate(-50%, -50%) rotate(0deg) scale(1)";
-  await waitForCutscene(560);
-  pulseTile(event.tile, "placement-impact", 480);
+  await waitForCutscene(1120);
+  tuckCoveredBoardCard(event);
+  pulseTile(event.tile, event.coveredCard ? "stack-settle" : "placement-impact", 860);
   finalCard?.classList.remove("cutscene-card-pending");
   finalCard?.classList.add("cutscene-card-reveal");
   ghost.classList.add("landed");
@@ -1619,9 +1635,38 @@ function retainShotTarget(event) {
   return retained;
 }
 
+function revealStackedCard(event) {
+  const revealed = event?.revealedTarget?.isConnected
+    ? event.revealedTarget
+    : boardEl.querySelector(`[data-tile-index="${event?.to}"] .board-card-top`);
+  if (!revealed || !event?.revealedCard) return;
+  const player = currentGame()?.players?.[event.revealedCard.owner - 1];
+  const playerName = player?.name || `Player ${event.revealedCard.owner}`;
+  revealed.classList.remove("stack-reveal-waiting");
+  revealed.classList.add("stack-reveal");
+  pulseTile(event.to, "stack-reveal-impact", 980);
+  setBoardCutsceneMessage(`${event.removedCard.value} - ${CARD_NAMES[event.removedCard.value]} lifts away. ${playerName}'s ${event.revealedCard.value} - ${CARD_NAMES[event.revealedCard.value]} is revealed.`);
+  boardTimeout(() => revealed.classList.remove("stack-reveal"), 980);
+}
+
 function prepareBoardCutsceneVisuals(events) {
   events.forEach((event) => {
-    if (event.type === "shot") retainShotTarget(event);
+    if (event.type === "place-card") {
+      const tile = boardEl.querySelector(`[data-tile-index="${event.tile}"]`);
+      event.finalCard = tile?.querySelector(".board-card-top") || null;
+      event.finalCard?.classList.add("cutscene-card-pending");
+      if (event.coveredCard) {
+        event.coveredLayer = tile?.querySelector(".board-card-underlay.stack-nearest") || null;
+        event.coveredLayer?.classList.add("stack-cover-source");
+      }
+    }
+    if (event.type === "shot") {
+      retainShotTarget(event);
+      if (event.revealedCard) {
+        event.revealedTarget = boardEl.querySelector(`[data-tile-index="${event.to}"] .board-card-top`);
+        event.revealedTarget?.classList.add("stack-reveal-waiting");
+      }
+    }
   });
 }
 
@@ -1629,6 +1674,12 @@ function clearBoardCutsceneVisuals(events) {
   events.forEach((event) => {
     event.retainedTarget?.remove();
     event.retainedTarget = null;
+    event.finalCard?.classList.remove("cutscene-card-pending", "cutscene-card-reveal");
+    event.finalCard = null;
+    event.coveredLayer?.classList.remove("stack-cover-source", "stack-tucking");
+    event.coveredLayer = null;
+    event.revealedTarget?.classList.remove("stack-reveal-waiting", "stack-reveal");
+    event.revealedTarget = null;
   });
 }
 
@@ -1797,6 +1848,7 @@ async function playShotVfx(event) {
   await waitForCutscene(300);
 
   if (!retainedTarget) {
+    revealStackedCard(event);
     await playReturnsVfx(event.to, event.removedCard ? [event.removedCard] : [], event.returnedTokens || []);
     return;
   }
@@ -1804,6 +1856,7 @@ async function playShotVfx(event) {
   retainedTarget.querySelector(".token-strip")?.remove();
   retainedTarget.classList.remove("hit");
   const returnTarget = pieceReturnTarget(event.removedCard.owner, "card");
+  revealStackedCard(event);
   retainedTarget.classList.add("returning");
   retainedTarget.style.left = `${returnTarget.x}px`;
   retainedTarget.style.top = `${returnTarget.y}px`;
@@ -1853,7 +1906,13 @@ function detectBoardCutscenes(previousSnapshot, nextSnapshot) {
     if (after.stack.length === before.stack.length + 1) {
       const placed = topCard(after);
       if (placed) {
-        const event = { type: "place-card", tile: index, card: { ...placed } };
+        const coveredCard = topCard(before);
+        const event = {
+          type: "place-card",
+          tile: index,
+          card: { ...placed },
+          coveredCard: coveredCard ? { ...coveredCard } : null
+        };
         placements.push(event);
         events.push(event);
       }
@@ -1904,12 +1963,14 @@ function detectBoardCutscenes(previousSnapshot, nextSnapshot) {
       const before = previousGame.board[targetIndex];
       const after = nextGame.board[targetIndex];
       const removedCard = before && after && before.stack.length > after.stack.length ? topCard(before) : null;
+      const revealedCard = removedCard && after.stack.length ? topCard(after) : null;
       const returnedTokens = removedCard ? before.tokens.map((token) => ({ ...token })) : [];
       events.push({
         type: "shot",
         from: shot.fromIndex,
         to: targetIndex,
         removedCard,
+        revealedCard: revealedCard ? { ...revealedCard } : null,
         returnedTokens,
         parried: /parry|dodged/i.test(nextGame.lastMessage || "")
       });
@@ -1927,6 +1988,7 @@ function detectBoardCutscenes(previousSnapshot, nextSnapshot) {
         removedTargets.push({
           index,
           removedCard: topCard(before),
+          revealedCard: after.stack.length ? topCard(after) : null,
           returnedTokens: before.tokens.map((token) => ({ ...token }))
         });
       }
@@ -1944,6 +2006,7 @@ function detectBoardCutscenes(previousSnapshot, nextSnapshot) {
           from: placement.tile,
           to: target.index,
           removedCard: target.removedCard,
+          revealedCard: target.revealedCard ? { ...target.revealedCard } : null,
           returnedTokens: target.returnedTokens
         });
       }
@@ -1964,6 +2027,7 @@ function detectBoardCutscenes(previousSnapshot, nextSnapshot) {
         from: tokenEvent.tile,
         to: target.index,
         removedCard: target.removedCard,
+        revealedCard: target.revealedCard ? { ...target.revealedCard } : null,
         returnedTokens: target.returnedTokens
       });
     });
@@ -2139,12 +2203,16 @@ function animateCardToTile(handIndex, tileIndex) {
   document.body.appendChild(ghost);
 
   window.requestAnimationFrame(() => {
+    const targetSize = Math.min(targetRect.width, targetRect.height) * 0.96;
     ghost.style.left = `${targetRect.left + targetRect.width / 2}px`;
     ghost.style.top = `${targetRect.top + targetRect.height / 2}px`;
-    ghost.style.transform = "translate(-50%, -50%) rotate(0deg) scale(.58)";
-    ghost.style.opacity = "0";
+    ghost.style.width = `${targetSize}px`;
+    ghost.style.height = `${targetSize}px`;
+    ghost.style.borderRadius = "8%";
+    ghost.style.transform = "translate(-50%, -50%) rotate(0deg) scale(1)";
+    ghost.style.opacity = ".08";
   });
-  boardTimeout(() => ghost.remove(), 360);
+  boardTimeout(() => ghost.remove(), 820);
 }
 
 function animateDraggedCardToTile(ghost, tileIndex) {
@@ -2158,12 +2226,16 @@ function animateDraggedCardToTile(ghost, tileIndex) {
   ghost.classList.add("place-ghost");
   ghost.style.transition = "";
   window.requestAnimationFrame(() => {
+    const targetSize = Math.min(targetRect.width, targetRect.height) * 0.96;
     ghost.style.left = `${targetRect.left + targetRect.width / 2}px`;
     ghost.style.top = `${targetRect.top + targetRect.height / 2}px`;
-    ghost.style.transform = "translate(-50%, -50%) rotate(0deg) scale(.58)";
-    ghost.style.opacity = "0";
+    ghost.style.width = `${targetSize}px`;
+    ghost.style.height = `${targetSize}px`;
+    ghost.style.borderRadius = "8%";
+    ghost.style.transform = "translate(-50%, -50%) rotate(0deg) scale(1)";
+    ghost.style.opacity = ".08";
   });
-  boardTimeout(() => ghost.remove(), 380);
+  boardTimeout(() => ghost.remove(), 820);
 }
 
 function clearCardDrag() {
@@ -3640,8 +3712,24 @@ function renderBoard() {
     if (remoteDragPreview?.tileIndex === index) tileEl.classList.add("remote-drag-hover");
 
     if (top) {
+      const coveredCards = tile.stack.slice(0, -1).slice(-2);
+      if (coveredCards.length) {
+        tileEl.classList.add("has-card-stack");
+        tileEl.style.setProperty("--visible-stack-depth", String(coveredCards.length));
+        coveredCards.forEach((coveredCard, coveredIndex) => {
+          const distanceFromTop = coveredCards.length - coveredIndex;
+          const underlay = document.createElement("div");
+          underlay.className = `card board-card board-card-underlay p${coveredCard.owner}-card card-v${coveredCard.value}`;
+          if (distanceFromTop === 1) underlay.classList.add("stack-nearest");
+          underlay.style.setProperty("--stack-depth", String(distanceFromTop));
+          underlay.setAttribute("aria-hidden", "true");
+          underlay.innerHTML = boardCardHtml(coveredCard);
+          tileEl.appendChild(underlay);
+        });
+      }
+
       const card = document.createElement("div");
-      card.className = `card board-card p${top.owner}-card card-v${top.value}`;
+      card.className = `card board-card board-card-top p${top.owner}-card card-v${top.value}`;
       if (top.value === 14 || tile.locked) card.classList.add("locked");
       if (top.stunned || tile.stunTurns > 0) card.classList.add("stunned");
       if (game.pendingShot && game.pendingShot.fromIndex === index) card.classList.add("shooter-ready");
@@ -3659,6 +3747,22 @@ function renderBoard() {
       });
       card.appendChild(strip);
       tileEl.appendChild(card);
+
+      if (coveredCards.length) {
+        const stackPeek = document.createElement("div");
+        stackPeek.className = "stack-peek";
+        stackPeek.setAttribute("aria-hidden", "true");
+        [...coveredCards].reverse().forEach((coveredCard) => {
+          const marker = document.createElement("span");
+          marker.className = `stack-peek-value p${coveredCard.owner}-stack`;
+          marker.textContent = String(coveredCard.value);
+          stackPeek.appendChild(marker);
+        });
+        tileEl.appendChild(stackPeek);
+      }
+
+      const ownerName = game.players?.[top.owner - 1]?.name || `Player ${top.owner}`;
+      tileEl.setAttribute("aria-label", `${effectiveValue(top, tile)} ${CARD_NAMES[top.value]}, ${ownerName}, stack of ${tile.stack.length}`);
     }
 
     if (remoteDragPreview?.tileIndex === index) {

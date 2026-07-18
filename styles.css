@@ -3314,7 +3314,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   pointer-events: none;
   opacity: .98;
   filter: drop-shadow(0 17px 24px rgba(0, 0, 0, .48)) brightness(1.06);
-  transform: translate(-50%, -50%) rotate(2deg) scale(1.08) !important;
+  transform: translate(-50%, -50%) rotate(2deg) scale(1.08);
   transition: none;
   animation: drag-tremble .46s ease-in-out infinite;
 }
@@ -3323,6 +3323,9 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   transition:
     left .72s cubic-bezier(.18, .88, .22, 1),
     top .72s cubic-bezier(.18, .88, .22, 1),
+    width .72s cubic-bezier(.18, .88, .22, 1),
+    height .72s cubic-bezier(.18, .88, .22, 1),
+    border-radius .72s ease,
     transform .72s cubic-bezier(.18, .88, .22, 1),
     opacity .72s ease;
 }
@@ -6713,6 +6716,163 @@ body > .board-card {
   justify-self: stretch;
 }
 
+#gameScreen .tile > .board-card-top {
+  z-index: 5;
+}
+
+#gameScreen .tile.has-card-stack > .board-card-top {
+  inset: 1px 5px 5px 1px;
+}
+
+#gameScreen .tile > .board-card-underlay {
+  inset:
+    calc(1px + var(--stack-depth, 1) * 3px)
+    1px
+    1px
+    calc(1px + var(--stack-depth, 1) * 3px);
+  z-index: 2;
+  opacity: .92;
+  filter: brightness(.72) saturate(.88);
+  pointer-events: none;
+  transition:
+    inset .62s cubic-bezier(.16, .9, .2, 1),
+    opacity .48s ease,
+    filter .62s ease,
+    transform .62s cubic-bezier(.16, .9, .2, 1);
+}
+
+#gameScreen .board-card-underlay .card-art,
+#gameScreen .board-card-underlay .card-name,
+#gameScreen .board-card-underlay .power-badge,
+#gameScreen .board-card-underlay .token-strip {
+  opacity: 0;
+  transition: opacity .34s ease;
+}
+
+#gameScreen .tile > .board-card-underlay.stack-cover-source {
+  inset: 1px;
+  z-index: 4;
+  opacity: 1;
+  filter: none;
+  transform: translate(0, 0) scale(1);
+}
+
+#gameScreen .board-card-underlay.stack-cover-source .card-art,
+#gameScreen .board-card-underlay.stack-cover-source .card-name,
+#gameScreen .board-card-underlay.stack-cover-source .power-badge {
+  opacity: 1;
+}
+
+#gameScreen .tile > .board-card-underlay.stack-tucking {
+  animation: covered-card-tuck .72s cubic-bezier(.16, .9, .2, 1) both;
+}
+
+#gameScreen .stack-peek {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  z-index: 8;
+  display: flex;
+  flex-direction: row-reverse;
+  gap: 1px;
+  pointer-events: none;
+}
+
+#gameScreen .stack-peek-value {
+  width: clamp(15px, 4.2vw, 19px);
+  height: clamp(15px, 4.2vw, 19px);
+  display: grid;
+  place-items: center;
+  color: #fff3ce;
+  border: 1px solid #e1b65e;
+  border-radius: 50%;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, .56);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(8px, 2.35vw, 11px);
+  font-weight: 900;
+  line-height: 1;
+}
+
+#gameScreen .stack-peek-value.p1-stack {
+  background: linear-gradient(180deg, #3f8bc4, #0b2945);
+}
+
+#gameScreen .stack-peek-value.p2-stack {
+  background: linear-gradient(180deg, #cf594c, #4a121b);
+}
+
+#gameScreen .board-card.stack-reveal-waiting {
+  opacity: .3;
+  transform: translate(3px, 3px) scale(.94);
+  filter: brightness(.68) saturate(.72);
+}
+
+#gameScreen .board-card.stack-reveal {
+  animation: stack-card-reveal .98s cubic-bezier(.16, .9, .2, 1) both;
+}
+
+#gameScreen .tile.stack-settle .board-card-top {
+  animation: stack-card-settle .86s cubic-bezier(.16, .9, .2, 1) both;
+}
+
+#gameScreen .tile.stack-reveal-impact {
+  animation: stack-tile-claim .98s ease both;
+}
+
+@keyframes stack-card-settle {
+  0% {
+    transform: translate(-4px, -8px) scale(1.08) rotate(-1.5deg);
+    filter: brightness(1.25);
+  }
+  55% {
+    transform: translate(1px, 1px) scale(.98) rotate(.5deg);
+  }
+  100% {
+    transform: translate(0, 0) scale(1) rotate(0);
+    filter: none;
+  }
+}
+
+@keyframes covered-card-tuck {
+  0% {
+    filter: brightness(1.16);
+  }
+  60% {
+    filter: brightness(.82) saturate(.94);
+  }
+  100% {
+    filter: brightness(.72) saturate(.88);
+  }
+}
+
+@keyframes stack-card-reveal {
+  0% {
+    opacity: .34;
+    transform: translate(4px, 4px) scale(.92);
+    filter: brightness(.72) saturate(.7);
+  }
+  55% {
+    opacity: 1;
+    transform: translate(-1px, -1px) scale(1.04);
+    filter: brightness(1.3) saturate(1.1);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+    filter: none;
+  }
+}
+
+@keyframes stack-tile-claim {
+  0%, 100% {
+    filter: none;
+  }
+  45% {
+    filter: brightness(1.24) saturate(1.15);
+    box-shadow: 0 0 18px rgba(241, 201, 121, .48);
+  }
+}
+
 #gameScreen .board-card.p1-card,
 body > .board-card.p1-card {
   --piece-color: #2d79b4;
@@ -6785,24 +6945,6 @@ body > .board-card .power-badge {
     0 3px 6px rgba(0, 0, 0, .42);
   font-family: Georgia, "Times New Roman", serif;
   font-size: clamp(13px, 3.7vw, 17px);
-}
-
-#gameScreen .board-card .suit-badge,
-body > .board-card .suit-badge {
-  top: 6%;
-  right: 6%;
-  z-index: 5;
-  min-width: clamp(18px, 4.8vw, 23px);
-  padding: 3px 4px;
-  color: #fff5d8;
-  border: 1px solid rgba(255, 231, 172, .68);
-  border-radius: 999px;
-  background: var(--piece-color);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, .38);
-  font-family: "Trebuchet MS", Arial, sans-serif;
-  font-size: clamp(6px, 1.7vw, 8px);
-  line-height: 1;
-  text-align: center;
 }
 
 #gameScreen .board-card .card-name,
