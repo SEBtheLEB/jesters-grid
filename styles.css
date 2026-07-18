@@ -7055,3 +7055,346 @@ body.navigation-locked .screen.active {
     animation: none;
   }
 }
+
+/* Responsive gameplay anchors. Every major surface owns a stable grid track;
+   the board scales from the space that remains instead of viewport height. */
+#gameScreen .game-shell {
+  position: relative;
+  grid-template-rows:
+    auto
+    auto
+    minmax(0, 1fr)
+    clamp(126px, 18svh, 160px)
+    clamp(38px, 5.2svh, 48px);
+  overflow: hidden;
+  opacity: 1;
+  visibility: visible;
+  isolation: isolate;
+}
+
+#gameScreen .top-hud,
+#gameScreen .message-bar,
+#gameScreen .board-frame,
+#gameScreen .hand-panel,
+#gameScreen .player-actions {
+  min-width: 0;
+  max-width: 100%;
+}
+
+#gameScreen .board-frame {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: auto;
+  container-type: size;
+  background-size: contain;
+}
+
+#gameScreen .board {
+  width: min(86.5cqw, 83.5cqh);
+  max-width: none;
+  max-height: none;
+}
+
+#gameScreen .hand-panel {
+  height: 100%;
+  min-height: 0;
+  overflow: visible;
+}
+
+#gameScreen .hand-stage,
+#gameScreen .hand-scroll,
+#gameScreen .hand {
+  width: 100%;
+  height: 100%;
+}
+
+/* Full piece inspection is a viewport layer, not an enlarged hand slot. */
+#gameScreen .game-shell.inspecting-piece::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 220;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 46%, rgba(223, 185, 112, .11), transparent 38%),
+    rgba(1, 5, 10, .78);
+  -webkit-backdrop-filter: blur(4px) saturate(.72);
+  backdrop-filter: blur(4px) saturate(.72);
+  animation: inspectBackdropIn .3s ease both;
+}
+
+#gameScreen .game-shell.inspecting-piece .hand-panel {
+  z-index: 225;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+#gameScreen .game-shell.inspecting-piece .section-label,
+#gameScreen .game-shell.inspecting-piece .hand::before {
+  opacity: 0;
+}
+
+#gameScreen .game-shell.inspecting-card .hand-card:not(.inspected),
+#gameScreen .game-shell.inspecting-card .token-dock,
+#gameScreen .game-shell.inspecting-token .hand-card,
+#gameScreen .game-shell.inspecting-token .token-button:not(.inspected),
+#gameScreen .game-shell.inspecting-token .token-toggle,
+#gameScreen .game-shell.inspecting-token .pouch-title,
+#gameScreen .game-shell.inspecting-token .pouch-count {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+#gameScreen .hand-card.inspected {
+  left: 50%;
+  top: 50%;
+  z-index: 235;
+  width: min(82vw, 330px);
+  height: auto;
+  max-height: none;
+  aspect-ratio: 500 / 757;
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  border-radius: clamp(7px, 2vw, 10px);
+  transform: translate(-50%, -50%) rotate(0deg) scale(1);
+  transform-origin: 50% 50%;
+}
+
+#gameScreen .hand-card.inspected .hand-art {
+  position: absolute;
+  left: 7.8%;
+  top: 18.5%;
+  width: 84.4%;
+  height: 48.7%;
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  background-size: contain, auto, auto, auto;
+}
+
+#gameScreen .hand-card.inspected .hand-name {
+  position: absolute;
+  left: 10%;
+  top: 67.1%;
+  width: 80%;
+  height: 7.7%;
+  min-height: 0;
+  margin: 0;
+  padding: 0 4%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: #17191c;
+  border: 0;
+  background: transparent;
+  font-size: clamp(15px, 4.6vw, 20px);
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#gameScreen .hand-card.inspected .hand-rules {
+  position: absolute;
+  left: 10%;
+  top: 78.1%;
+  width: 80%;
+  height: 15.8%;
+  min-height: 0;
+  max-height: none;
+  margin: 0;
+  padding: 2% 3%;
+  display: grid;
+  align-content: center;
+  overflow: auto;
+  color: #e6c98e;
+  font-size: clamp(9px, 2.75vw, 12px);
+  line-height: 1.22;
+  text-align: center;
+  scrollbar-width: none;
+}
+
+#gameScreen .hand-card.inspected .hand-rules::-webkit-scrollbar {
+  display: none;
+}
+
+#gameScreen .hand-card.inspected .power-badge {
+  left: 8.2%;
+  top: 3.7%;
+  width: 18.5%;
+  min-width: 0;
+  height: auto;
+  aspect-ratio: 1;
+  font-size: clamp(18px, 5.6vw, 25px);
+}
+
+#gameScreen .hand-card.inspected .suit-badge {
+  top: 8.2%;
+  right: 10.5%;
+  font-size: clamp(9px, 2.7vw, 12px);
+}
+
+#gameScreen .token-button.inspected {
+  left: 50%;
+  top: 50%;
+  z-index: 235;
+  width: min(78vw, 300px);
+  height: min(46svh, 340px);
+  min-width: 0;
+  min-height: 0;
+  max-height: none;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  align-content: start;
+  justify-items: center;
+  gap: clamp(10px, 2svh, 16px);
+  padding: clamp(18px, 4.8vw, 24px);
+  overflow: hidden;
+  opacity: 1;
+  visibility: visible;
+  color: #ead09b;
+  border: 2px solid rgba(223, 185, 112, .92);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 50% 16%, rgba(223, 185, 112, .18), transparent 34%),
+    repeating-linear-gradient(7deg, rgba(255, 255, 255, .018) 0 1px, transparent 1px 5px),
+    linear-gradient(180deg, #13243a, #07101b 64%, #03070d);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 235, 180, .14),
+    0 0 28px rgba(223, 185, 112, .28),
+    0 24px 42px rgba(0, 0, 0, .7);
+  transform: translate(-50%, -50%) scale(1);
+  animation: token-inspect-rise .28s cubic-bezier(.18, .88, .24, 1.08) both;
+}
+
+#gameScreen .token-button.inspected .token-icon {
+  width: clamp(78px, 22vw, 96px);
+  height: clamp(84px, 24vw, 104px);
+  border: 0;
+  background-color: transparent;
+  font-size: clamp(30px, 8vw, 38px);
+  filter: drop-shadow(0 8px 7px rgba(0, 0, 0, .42));
+}
+
+#gameScreen .token-button.inspected.token-bard .token-icon { background-image: var(--skin-token-bard); }
+#gameScreen .token-button.inspected.token-ammo .token-icon { background-image: var(--skin-token-ammo); }
+#gameScreen .token-button.inspected.token-pierce .token-icon { background-image: var(--skin-token-pierce); }
+#gameScreen .token-button.inspected.token-potion .token-icon { background-image: var(--skin-token-potion); }
+#gameScreen .token-button.inspected.token-parry .token-icon { background-image: var(--skin-token-parry); }
+
+#gameScreen .token-button.inspected .token-name {
+  position: static;
+  width: auto;
+  max-width: 100%;
+  transform: none;
+  opacity: 1;
+  color: #e6c98e;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(17px, 4.8vw, 21px);
+  line-height: 1;
+  text-align: center;
+  white-space: normal;
+}
+
+#gameScreen .token-button.inspected .token-count {
+  top: 13px;
+  right: 13px;
+  min-width: 30px;
+  padding: 4px 7px;
+  color: #17191c;
+  border-color: #bd8c3d;
+  background: #e4c58e;
+  font-size: 10px;
+}
+
+#gameScreen .token-button.inspected .token-detail {
+  display: grid;
+  align-content: center;
+  width: 100%;
+  max-width: 100%;
+  padding: 10px 12px;
+  overflow: auto;
+  color: #ead09b;
+  border-top: 1px solid rgba(223, 185, 112, .34);
+  font-family: "Segoe Print", "Bradley Hand", "Trebuchet MS", sans-serif;
+  font-size: clamp(10px, 2.8vw, 12px);
+  line-height: 1.3;
+  text-align: center;
+  text-transform: none;
+  white-space: normal;
+  scrollbar-width: none;
+}
+
+#gameScreen .token-button.inspected .token-detail::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes inspectBackdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (max-height: 760px) {
+  #gameScreen .game-shell {
+    grid-template-rows:
+      auto
+      auto
+      minmax(0, 1fr)
+      clamp(116px, 17.2svh, 132px)
+      38px;
+  }
+
+  #gameScreen .hand-card.inspected {
+    width: min(76vw, 286px);
+  }
+}
+
+@media (max-height: 680px) {
+  #gameScreen .game-shell {
+    grid-template-rows: auto auto minmax(0, 1fr) 112px 35px;
+    gap: 3px;
+  }
+
+  #gameScreen .match-header {
+    min-height: 29px;
+  }
+
+  #gameScreen .icon-medallion,
+  #gameScreen .settings-button {
+    width: 32px;
+    height: 29px;
+  }
+
+  #gameScreen .room-strip {
+    min-height: 18px;
+  }
+
+  #gameScreen .duelist-bar,
+  #gameScreen .opponent-panel,
+  #gameScreen .player-panel {
+    min-height: 42px;
+  }
+
+  #gameScreen .message-bar {
+    min-height: 30px;
+  }
+
+  #gameScreen .hand-card.inspected {
+    width: min(72vw, 252px);
+  }
+
+  #gameScreen .player-actions,
+  #gameScreen .action-button {
+    min-height: 35px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #gameScreen .game-shell.inspecting-piece::before {
+    animation: none;
+  }
+}

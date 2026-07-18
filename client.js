@@ -311,12 +311,12 @@ let rulesReturnScreen = "menu";
 let screenTransitionActive = false;
 
 const DECK_CARD_LAYOUTS = [
-  { x: -46, y: -22, r: -8, openX: -90, openY: -42, openR: -9, z: 2 },
-  { x: 0, y: -27, r: 0, openX: 0, openY: -48, openR: 0, z: 3 },
-  { x: 46, y: -22, r: 8, openX: 90, openY: -42, openR: 9, z: 2 },
-  { x: -42, y: 14, r: -5, openX: -84, openY: 16, openR: -6, z: 5 },
-  { x: 0, y: 19, r: 0, openX: 0, openY: 22, openR: 0, z: 6 },
-  { x: 42, y: 14, r: 5, openX: 84, openY: 16, openR: 6, z: 5 }
+  { x: -46, y: -22, r: -8, openX: -90, openY: -30, openR: -9, z: 2 },
+  { x: 0, y: -27, r: 0, openX: 0, openY: -34, openR: 0, z: 3 },
+  { x: 46, y: -22, r: 8, openX: 90, openY: -30, openR: 9, z: 2 },
+  { x: -42, y: 14, r: -5, openX: -84, openY: 4, openR: -6, z: 5 },
+  { x: 0, y: 19, r: 0, openX: 0, openY: 8, openR: 0, z: 6 },
+  { x: 42, y: 14, r: 5, openX: 84, openY: 4, openR: 6, z: 5 }
 ];
 
 const TOKEN_LAYOUTS = [
@@ -1275,10 +1275,10 @@ function tapFeedback(element) {
   gameAudio.play("tap");
 }
 
-function setInspectOrigin(element, finalWidth) {
+function setInspectOrigin(element, finalWidth, finalTopRatio = 0.5) {
   const rect = element.getBoundingClientRect();
   const fromX = rect.left + rect.width / 2 - window.innerWidth / 2;
-  const fromY = rect.top + rect.height / 2 - window.innerHeight * 0.45;
+  const fromY = rect.top + rect.height / 2 - window.innerHeight * finalTopRatio;
   const scale = Math.max(0.2, Math.min(0.8, rect.width / finalWidth));
   document.documentElement.style.setProperty("--inspect-from-x", `${fromX}px`);
   document.documentElement.style.setProperty("--inspect-from-y", `${fromY}px`);
@@ -1287,7 +1287,7 @@ function setInspectOrigin(element, finalWidth) {
 
 function inspectCardFromElement(card, index, value) {
   window.clearTimeout(inspectReturnTimer);
-  setInspectOrigin(card, Math.min(window.innerWidth * 0.82, 315));
+  setInspectOrigin(card, Math.min(window.innerWidth * 0.82, 330));
   suppressPieceClickUntil = Date.now() + 520;
   inspectedCardIndex = index;
   inspectedTokenId = null;
@@ -1327,7 +1327,7 @@ function closeInspectedCardAnimated() {
 }
 
 function inspectTokenFromElement(button, token) {
-  setInspectOrigin(button, Math.min(window.innerWidth * 0.76, 292));
+  setInspectOrigin(button, Math.min(window.innerWidth * 0.78, 300));
   suppressPieceClickUntil = Date.now() + 520;
   inspectedTokenId = token.id;
   inspectedCardIndex = null;
@@ -3483,7 +3483,7 @@ function render() {
   gameShell.classList.toggle("hidden", !playing);
 
   if (!playing) {
-    gameShell.classList.remove("inspecting-piece", "dragging-card", "dragging-token");
+    gameShell.classList.remove("inspecting-piece", "inspecting-card", "inspecting-token", "dragging-card", "dragging-token");
     previousRoomPhase = phase;
     previousTurnSignature = "";
     renderWin();
@@ -3491,6 +3491,8 @@ function render() {
   }
 
   gameShell.classList.toggle("inspecting-piece", inspectedCardIndex !== null || inspectedTokenId !== null);
+  gameShell.classList.toggle("inspecting-card", inspectedCardIndex !== null);
+  gameShell.classList.toggle("inspecting-token", inspectedTokenId !== null);
   renderStatus();
   renderBoard();
   renderHand();
