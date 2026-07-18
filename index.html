@@ -8,7 +8,7 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/icon.svg" />
-  <link rel="stylesheet" href="/styles.css?v=29" />
+  <link rel="stylesheet" href="/styles.css?v=30" />
   <link rel="stylesheet" href="/assets/skins/default/skin.css?v=23" />
 </head>
 <body data-theme="dark">
@@ -16,123 +16,97 @@
     <section id="menuScreen" class="screen active home-screen">
       <div class="menu-content home-shell">
         <div class="home-menu-stack">
-        <div class="home-corner-bar" aria-label="Home shortcuts">
-          <button id="newsBtn" class="home-corner-button icon-button asset-slot fallback-frame card-hover" data-menu-action="news" data-asset-bg="bottomButtonFrame" type="button" aria-label="News">
-            <span class="ui-icon news-icon asset-slot" data-asset-bg="newsIcon" aria-hidden="true"></span>
-            <span>News</span>
-          </button>
-          <button id="rewardsBtn" class="home-corner-button icon-button asset-slot fallback-frame sparkle card-hover" data-menu-action="rewards" data-asset-bg="bottomButtonFrame" type="button" aria-label="Rewards">
-            <span class="ui-icon rewards-icon asset-slot" data-asset-bg="rewardsIcon" aria-hidden="true"></span>
-            <span>Rewards</span>
-          </button>
-        </div>
-
-        <section class="home-hero" aria-label="Jester's Grid">
-          <div class="reference-slice reference-hero-slice" aria-hidden="true">
-            <img src="/assets/ui/jgrid-menu-reference-v2.png" alt="" />
+          <div class="home-corner-bar" aria-label="Home shortcuts">
+            <button id="newsBtn" class="home-corner-button layered-round-button tap-bounce" data-menu-action="news" type="button" aria-label="News">
+              <span class="round-frame-layer asset-slot" data-asset-img="roundButtonFrame" aria-hidden="true"><img class="asset-img" alt="" /></span>
+              <span class="ui-icon news-icon" aria-hidden="true"></span>
+              <span class="round-button-label">News</span>
+            </button>
+            <button id="rewardsBtn" class="home-corner-button layered-round-button tap-bounce" data-menu-action="rewards" type="button" aria-label="Rewards">
+              <span class="round-frame-layer asset-slot" data-asset-img="roundButtonFrame" aria-hidden="true"><img class="asset-img" alt="" /></span>
+              <span class="ui-icon rewards-icon" aria-hidden="true"></span>
+              <span class="round-button-label">Rewards</span>
+              <i class="button-spark sparkle-one" aria-hidden="true"></i>
+            </button>
           </div>
-          <div class="home-hero-art asset-slot" data-asset-bg="heroMascots" aria-hidden="true"></div>
-          <div class="mascot-slot mascot-left asset-slot fallback-frame soft-breathe" data-asset-img="girlJester">
-            <img class="asset-img" alt="Girl jester mascot" />
-            <div class="mascot-fallback mascot-girl" aria-hidden="true">
-              <span class="mascot-hat"></span>
-              <span class="mascot-face"></span>
-              <span class="mascot-collar"></span>
+
+          <section class="home-hero layered-home-hero" aria-label="Jester's Grid">
+            <span class="hero-character-layer asset-slot soft-breathe" data-asset-img="heroMascots" aria-hidden="true"><img class="asset-img" alt="" /></span>
+            <div class="title-stack idle-float">
+              <span class="title-hat" aria-hidden="true"><i></i><i></i><i></i></span>
+              <div class="title-parchment"><h1>Jester's</h1></div>
+              <strong class="title-grid-word" aria-label="Grid"><i>G</i><i>R</i><i>I</i><i>D</i></strong>
+              <p class="home-tagline">Where every step is a joke,<br>and every joke changes fate.</p>
+              <i class="hero-spark hero-spark-one" aria-hidden="true"></i>
+              <i class="hero-spark hero-spark-two" aria-hidden="true"></i>
+              <i class="hero-spark hero-spark-three" aria-hidden="true"></i>
             </div>
-          </div>
+          </section>
 
-          <div class="title-stack">
-            <div class="title-backing asset-slot fallback-frame idle-float" data-asset-bg="titleBacking">
-              <div class="logo-banner asset-slot" data-asset-bg="logoBanner">
-                <i class="title-star left" aria-hidden="true"></i>
-                <h1>Jester's Grid</h1>
-                <i class="title-star right" aria-hidden="true"></i>
+          <section class="profile-panel layered-profile" aria-label="Player profile">
+            <span class="profile-frame-layer asset-slot" data-asset-img="profileFrame" aria-hidden="true"><img class="asset-img" alt="" /></span>
+            <div class="profile-avatar" aria-label="Player avatar">
+              <span class="profile-avatar-frame asset-slot" data-asset-img="roundButtonFrame" aria-hidden="true"><img class="asset-img" alt="" /></span>
+              <span class="avatar-jester" aria-hidden="true"><i></i></span>
+              <strong id="profileLevelBadge">14</strong>
+            </div>
+            <div class="profile-copy">
+              <label class="visually-hidden" for="playerName">Player name</label>
+              <input id="playerName" class="profile-name-input" maxlength="18" autocomplete="nickname" value="Jester" />
+              <div class="profile-meta">
+                <span>Rank: <strong id="profileRank">Trickster</strong></span>
+              </div>
+              <div id="profileXpTrack" class="xp-track" role="progressbar" aria-label="Experience" aria-valuemin="0" aria-valuemax="1000" aria-valuenow="350">
+                <span id="profileXpBar"></span>
+              </div>
+              <div id="profileXpCopy" class="xp-copy">350 / 1000 XP</div>
+            </div>
+            <div class="currency-stack" aria-label="Currencies">
+              <div class="currency-row">
+                <span class="currency-icon coin-icon" aria-hidden="true"></span>
+                <strong id="profileCoins">1,250</strong>
+                <button class="currency-plus tap-bounce" data-menu-action="coins" type="button" aria-label="Open coin shop">+</button>
+              </div>
+              <div class="currency-row">
+                <span class="currency-icon gem-icon" aria-hidden="true"></span>
+                <strong id="profileGems">340</strong>
+                <button class="currency-plus tap-bounce" data-menu-action="gems" type="button" aria-label="Open gem shop">+</button>
               </div>
             </div>
-            <p class="home-tagline">Where every step is a joke,<br>and every joke changes fate.</p>
-          </div>
+          </section>
 
-          <div class="mascot-slot mascot-right asset-slot fallback-frame soft-breathe" data-asset-img="boyJester">
-            <img class="asset-img" alt="Boy jester mascot" />
-            <div class="mascot-fallback mascot-boy" aria-hidden="true">
-              <span class="mascot-hat"></span>
-              <span class="mascot-face"></span>
-              <span class="mascot-collar"></span>
-            </div>
-          </div>
-        </section>
+          <section class="home-main-actions layered-main-actions" aria-label="Main actions">
+            <button id="playMenuCard" class="menu-card layered-menu-card tap-bounce" data-menu-action="online" type="button">
+              <span class="menu-card-frame-layer asset-slot" data-asset-img="menuCardFrame" aria-hidden="true"><img class="asset-img" alt="" /></span>
+              <strong class="menu-card-title">Play</strong>
+              <span class="menu-emblem-layer asset-slot" data-asset-img="playEmblem" aria-hidden="true"><img class="asset-img" alt="" /></span>
+              <em>Online Duel</em>
+              <i class="card-spark card-spark-one" aria-hidden="true"></i><i class="card-spark card-spark-two" aria-hidden="true"></i>
+            </button>
+            <button id="decksMenuCard" class="menu-card layered-menu-card tap-bounce" data-menu-action="solo" type="button">
+              <span class="menu-card-frame-layer asset-slot" data-asset-img="menuCardFrame" aria-hidden="true"><img class="asset-img" alt="" /></span>
+              <strong class="menu-card-title">Solo</strong>
+              <span class="menu-emblem-layer asset-slot" data-asset-img="soloEmblem" aria-hidden="true"><img class="asset-img" alt="" /></span>
+              <em>Bot Duel</em>
+              <i class="card-spark card-spark-one" aria-hidden="true"></i><i class="card-spark card-spark-two" aria-hidden="true"></i>
+            </button>
+            <button id="rankedMenuCard" class="menu-card layered-menu-card tap-bounce" data-menu-action="ranked" type="button">
+              <span class="menu-card-frame-layer asset-slot" data-asset-img="menuCardFrame" aria-hidden="true"><img class="asset-img" alt="" /></span>
+              <strong class="menu-card-title">Ranked</strong>
+              <span class="menu-emblem-layer asset-slot" data-asset-img="rankedEmblem" aria-hidden="true"><img class="asset-img" alt="" /></span>
+              <em>Coming Soon</em>
+              <i class="card-spark card-spark-one" aria-hidden="true"></i><i class="card-spark card-spark-two" aria-hidden="true"></i>
+            </button>
+          </section>
 
-        <section class="profile-panel fantasy-panel asset-slot fallback-frame" data-asset-bg="profileFrame" aria-label="Player profile">
-          <div class="reference-slice reference-profile-slice" aria-hidden="true">
-            <img src="/assets/ui/jgrid-menu-reference-v2.png" alt="" />
-          </div>
-          <div class="profile-avatar asset-slot fallback-frame" data-asset-img="playerAvatar">
-            <img class="asset-img" alt="Player avatar" />
-            <span class="avatar-fallback" aria-hidden="true">J</span>
-          </div>
-          <div class="profile-copy">
-            <label class="visually-hidden" for="playerName">Player name</label>
-            <input id="playerName" class="profile-name-input" maxlength="18" autocomplete="nickname" value="Jester" />
-            <div class="profile-meta">
-              <span>Trickster</span>
-              <strong>Level 14</strong>
-            </div>
-            <div class="xp-track" aria-label="350 of 1000 XP">
-              <span style="width: 35%"></span>
-            </div>
-            <div class="xp-copy">350 / 1000 XP</div>
-          </div>
-          <div class="currency-stack" aria-label="Currencies">
-            <div class="currency-row">
-              <span class="currency-icon coin-icon asset-slot" data-asset-bg="coinIcon" aria-hidden="true"></span>
-              <strong>1,250</strong>
-              <button class="currency-plus" data-menu-action="coins" type="button" aria-label="Add coins">+</button>
-            </div>
-            <div class="currency-row">
-              <span class="currency-icon gem-icon asset-slot" data-asset-bg="gemIcon" aria-hidden="true"></span>
-              <strong>340</strong>
-              <button class="currency-plus" data-menu-action="gems" type="button" aria-label="Add gems">+</button>
-            </div>
-          </div>
-        </section>
-
-        <section class="home-main-actions" aria-label="Main actions">
-          <div class="reference-slice reference-actions-slice" aria-hidden="true">
-            <img src="/assets/ui/jgrid-menu-reference-v2.png" alt="" />
-          </div>
-          <button id="playMenuCard" class="menu-card asset-slot fallback-frame card-hover tap-bounce" data-menu-action="online" data-asset-bg="playCard" type="button">
-            <span class="menu-card-icon play-card-icon">
-              <span class="mini-card asset-slot red-back" data-asset-bg="cardBackRed"></span>
-            </span>
-            <strong>Online</strong>
-            <em>Room Multiplayer</em>
-          </button>
-          <button id="decksMenuCard" class="menu-card asset-slot fallback-frame card-hover tap-bounce" data-menu-action="solo" data-asset-bg="decksCard" type="button">
-            <span class="menu-card-icon decks-card-icon">
-              <span class="mini-card asset-slot red-back" data-asset-bg="cardBackRed"></span>
-              <span class="mini-card asset-slot blue-back" data-asset-bg="cardBackBlue"></span>
-            </span>
-            <strong>Solo</strong>
-            <em>Bot Duel</em>
-          </button>
-          <button id="rankedMenuCard" class="menu-card asset-slot fallback-frame card-hover tap-bounce" data-menu-action="ranked" data-asset-bg="rankedCard" type="button">
-            <span class="menu-card-icon ranked-card-icon" aria-hidden="true"></span>
-            <strong>Ranked</strong>
-            <em>Coming soon</em>
-          </button>
-        </section>
-
-        <nav class="home-icon-menu reference-icon-menu" aria-label="More options">
-          <div class="reference-slice reference-bottom-slice" aria-hidden="true">
-            <img src="/assets/ui/jgrid-menu-reference-v2.png" alt="" />
-          </div>
-          <button class="home-icon-button tap-bounce" data-menu-action="shop" type="button" aria-label="Shop"><span>Shop</span></button>
-          <button class="home-icon-button tap-bounce" data-menu-action="collection" type="button" aria-label="Collection"><span>Collection</span></button>
-          <button class="home-icon-button tap-bounce" data-menu-action="quests" type="button" aria-label="Quests"><span>Quests</span></button>
-          <button class="home-icon-button tap-bounce" data-menu-action="settings" type="button" aria-label="Settings"><span>Settings</span></button>
-          <button class="home-icon-button tap-bounce" data-menu-action="profile" type="button" aria-label="Profile"><span>Profile</span></button>
-          <button class="home-icon-button tap-bounce" data-menu-action="exit" type="button" aria-label="Exit"><span>Exit</span></button>
-        </nav>
+          <nav class="home-icon-menu layered-icon-menu" aria-label="More options">
+            <button class="home-icon-button tap-bounce" data-menu-action="shop" type="button" aria-label="Shop"><span class="utility-frame asset-slot" data-asset-img="roundButtonFrame" aria-hidden="true"><img class="asset-img" alt="" /></span><span class="bottom-icon shop-icon" aria-hidden="true"></span><span class="utility-label">Shop</span></button>
+            <button class="home-icon-button tap-bounce" data-menu-action="collection" type="button" aria-label="Collection"><span class="utility-frame asset-slot" data-asset-img="roundButtonFrame" aria-hidden="true"><img class="asset-img" alt="" /></span><span class="bottom-icon collection-icon" aria-hidden="true"></span><span class="utility-label">Collection</span></button>
+            <button class="home-icon-button tap-bounce" data-menu-action="quests" type="button" aria-label="Quests"><span class="utility-frame asset-slot" data-asset-img="roundButtonFrame" aria-hidden="true"><img class="asset-img" alt="" /></span><span class="bottom-icon quests-icon" aria-hidden="true"></span><span class="utility-label">Quests</span></button>
+            <button class="home-icon-button tap-bounce" data-menu-action="settings" type="button" aria-label="Settings"><span class="utility-frame asset-slot" data-asset-img="roundButtonFrame" aria-hidden="true"><img class="asset-img" alt="" /></span><span class="bottom-icon settings-icon" aria-hidden="true"></span><span class="utility-label">Settings</span></button>
+            <button class="home-icon-button tap-bounce" data-menu-action="profile" type="button" aria-label="Profile"><span class="utility-frame asset-slot" data-asset-img="roundButtonFrame" aria-hidden="true"><img class="asset-img" alt="" /></span><span class="bottom-icon profile-icon" aria-hidden="true"></span><span class="utility-label">Profile</span></button>
+            <button class="home-icon-button tap-bounce" data-menu-action="exit" type="button" aria-label="Exit"><span class="utility-frame asset-slot" data-asset-img="roundButtonFrame" aria-hidden="true"><img class="asset-img" alt="" /></span><span class="bottom-icon exit-icon" aria-hidden="true"></span><span class="utility-label">Exit</span></button>
+          </nav>
         </div>
 
         <div id="menuToast" class="menu-toast" aria-live="polite"></div>
@@ -151,7 +125,8 @@
         </header>
 
         <div class="online-character-banner" aria-hidden="true">
-          <img src="/assets/ui/jgrid-menu-reference-v2.png" alt="" />
+          <img src="/assets/ui/generated/home-jesters-layer.png" alt="" />
+          <strong>Jester's Grid</strong>
         </div>
 
         <section class="online-choice-panel" aria-label="Online duel options">
@@ -361,6 +336,6 @@
     </div>
   </main>
 
-  <script src="/client.js?v=29"></script>
+  <script src="/client.js?v=30"></script>
 </body>
 </html>

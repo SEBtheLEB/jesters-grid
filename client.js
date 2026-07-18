@@ -71,15 +71,20 @@ const CARD_DETAILS = {
 
 // Add your custom PNG paths here. Leave empty to use the CSS fallback artwork.
 const UI_ASSETS = {
-  menuReference: "/assets/ui/jgrid-menu-reference-v2.png",
+  menuReference: "",
   characterReference: "/assets/ui/luna-jax-character-reference.png",
   logoBanner: "",
   titleBacking: "",
   girlJester: "",
   boyJester: "",
-  heroMascots: "",
+  heroMascots: "/assets/ui/generated/home-jesters-layer.png",
   playerAvatar: "",
-  profileFrame: "",
+  profileFrame: "/assets/ui/generated/profile-frame.png",
+  menuCardFrame: "/assets/ui/generated/menu-card-frame.png",
+  playEmblem: "/assets/ui/generated/play-emblem.png",
+  soloEmblem: "/assets/ui/generated/solo-emblem.png",
+  rankedEmblem: "/assets/ui/generated/ranked-emblem.png",
+  roundButtonFrame: "/assets/ui/generated/round-button-frame.png",
   playCard: "",
   decksCard: "",
   rankedCard: "",
@@ -241,6 +246,25 @@ const menuToast = document.getElementById("menuToast");
 const onlineBackBtn = document.getElementById("onlineBackBtn");
 const onlineJoinRevealBtn = document.getElementById("onlineJoinRevealBtn");
 const onlineJoinForm = document.getElementById("onlineJoinForm");
+const profileRank = document.getElementById("profileRank");
+const profileLevelBadge = document.getElementById("profileLevelBadge");
+const profileXpTrack = document.getElementById("profileXpTrack");
+const profileXpBar = document.getElementById("profileXpBar");
+const profileXpCopy = document.getElementById("profileXpCopy");
+const profileCoins = document.getElementById("profileCoins");
+const profileGems = document.getElementById("profileGems");
+
+const PLAYER_PROFILE_KEY = "jg-player-profile-v1";
+const DEFAULT_PLAYER_PROFILE = Object.freeze({
+  name: "Jester",
+  rank: "Trickster",
+  level: 14,
+  xp: 350,
+  xpMax: 1000,
+  coins: 1250,
+  gems: 340
+});
+const playerProfile = loadPlayerProfile();
 
 let snapshot = null;
 let selectedCardIndex = null;
@@ -349,8 +373,61 @@ function applyTheme(theme) {
   localStorage.setItem("jg-theme", theme);
 }
 
+function loadPlayerProfile() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PLAYER_PROFILE_KEY) || "null");
+    if (!saved || typeof saved !== "object") return { ...DEFAULT_PLAYER_PROFILE };
+    return { ...DEFAULT_PLAYER_PROFILE, ...saved };
+  } catch {
+    return { ...DEFAULT_PLAYER_PROFILE };
+  }
+}
+
+function normalizeProfileNumber(value, fallback, minimum = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(minimum, Math.round(number)) : fallback;
+}
+
+function savePlayerProfile() {
+  localStorage.setItem(PLAYER_PROFILE_KEY, JSON.stringify(playerProfile));
+}
+
+function renderPlayerProfile() {
+  const xpMax = normalizeProfileNumber(playerProfile.xpMax, DEFAULT_PLAYER_PROFILE.xpMax, 1);
+  const xp = Math.min(normalizeProfileNumber(playerProfile.xp, DEFAULT_PLAYER_PROFILE.xp), xpMax);
+  const progress = Math.max(0, Math.min(100, xp / xpMax * 100));
+  const formatNumber = new Intl.NumberFormat();
+
+  profileRank.textContent = String(playerProfile.rank || DEFAULT_PLAYER_PROFILE.rank);
+  profileLevelBadge.textContent = String(normalizeProfileNumber(playerProfile.level, DEFAULT_PLAYER_PROFILE.level, 1));
+  profileXpBar.style.width = `${progress}%`;
+  profileXpTrack.setAttribute("aria-valuemax", String(xpMax));
+  profileXpTrack.setAttribute("aria-valuenow", String(xp));
+  profileXpCopy.textContent = `${formatNumber.format(xp)} / ${formatNumber.format(xpMax)} XP`;
+  profileCoins.textContent = formatNumber.format(normalizeProfileNumber(playerProfile.coins, DEFAULT_PLAYER_PROFILE.coins));
+  profileGems.textContent = formatNumber.format(normalizeProfileNumber(playerProfile.gems, DEFAULT_PLAYER_PROFILE.gems));
+}
+
+function updatePlayerProfile(updates = {}) {
+  const allowed = ["rank", "level", "xp", "xpMax", "coins", "gems"];
+  allowed.forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(updates, key)) playerProfile[key] = updates[key];
+  });
+  if (Object.prototype.hasOwnProperty.call(updates, "name")) {
+    const name = String(updates.name || "").trim().slice(0, 18) || DEFAULT_PLAYER_PROFILE.name;
+    playerProfile.name = name;
+    playerNameInput.value = name;
+    localStorage.setItem("jg-name", name);
+  }
+  savePlayerProfile();
+  renderPlayerProfile();
+  return { ...playerProfile };
+}
+
 applyTheme(localStorage.getItem("jg-theme") || "dark");
-playerNameInput.value = localStorage.getItem("jg-name") || "Jester";
+playerNameInput.value = localStorage.getItem("jg-name") || playerProfile.name || DEFAULT_PLAYER_PROFILE.name;
+playerProfile.name = playerNameInput.value;
+renderPlayerProfile();
 
 const roomFromUrl = new URLSearchParams(window.location.search).get("room");
 if (roomFromUrl) roomCodeInput.value = roomFromUrl.toUpperCase();
@@ -4063,6 +4140,7 @@ async function copyInvite() {
 window.UI_ASSETS = UI_ASSETS;
 window.applyHomeUiAssets = applyHomeUiAssets;
 window.handleMenuAction = handleMenuAction;
+window.updateJesterProfile = updatePlayerProfile;
 applyHomeUiAssets();
 connectRealtime();
 
@@ -4079,6 +4157,12 @@ document.querySelectorAll("[data-menu-action]").forEach((button) => {
     const action = event.currentTarget.dataset.menuAction;
     if (action) handleMenuAction(action, event.currentTarget);
   });
+});
+playerNameInput.addEventListener("input", () => {
+  const name = playerNameInput.value.trim().slice(0, 18);
+  playerProfile.name = name || DEFAULT_PLAYER_PROFILE.name;
+  localStorage.setItem("jg-name", playerProfile.name);
+  savePlayerProfile();
 });
 document.getElementById("createRoomBtn").addEventListener("click", createRoom);
 document.getElementById("joinRoomBtn").addEventListener("click", joinRoom);

@@ -1,11 +1,17 @@
-const CACHE_NAME = "jesters-grid-pwa-v29";
+const CACHE_NAME = "jesters-grid-pwa-v30";
 const APP_ASSETS = [
   "/",
   "/index.html",
   "/styles.css",
   "/assets/skins/default/skin.css",
-  "/assets/ui/jgrid-menu-reference-v2.png",
   "/assets/ui/luna-jax-character-reference.png",
+  "/assets/ui/generated/home-jesters-layer.png",
+  "/assets/ui/generated/menu-card-frame.png",
+  "/assets/ui/generated/play-emblem.png",
+  "/assets/ui/generated/solo-emblem.png",
+  "/assets/ui/generated/ranked-emblem.png",
+  "/assets/ui/generated/profile-frame.png",
+  "/assets/ui/generated/round-button-frame.png",
   "/client.js",
   "/manifest.webmanifest",
   "/icon.svg"
