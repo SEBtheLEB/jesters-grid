@@ -253,16 +253,18 @@ const profileXpBar = document.getElementById("profileXpBar");
 const profileXpCopy = document.getElementById("profileXpCopy");
 const profileCoins = document.getElementById("profileCoins");
 const profileGems = document.getElementById("profileGems");
+const pageTransition = document.getElementById("pageTransition");
 
-const PLAYER_PROFILE_KEY = "jg-player-profile-v1";
+const PLAYER_PROFILE_KEY = "jg-player-profile-v2";
+const PROFILE_AWARDS_KEY = "jg-profile-awards-v1";
 const DEFAULT_PLAYER_PROFILE = Object.freeze({
   name: "Jester",
-  rank: "Trickster",
-  level: 14,
-  xp: 350,
-  xpMax: 1000,
-  coins: 1250,
-  gems: 340
+  rank: "Unranked",
+  level: 0,
+  xp: 0,
+  xpMax: 100,
+  coins: 0,
+  gems: 0
 });
 const playerProfile = loadPlayerProfile();
 
@@ -306,6 +308,7 @@ let notificationRegistrationInFlight = false;
 let lastNotificationRegistrationKey = "";
 let roomNotificationPermissionPromise = null;
 let rulesReturnScreen = "menu";
+let screenTransitionActive = false;
 
 const DECK_CARD_LAYOUTS = [
   { x: -46, y: -22, r: -8, openX: -90, openY: -42, openR: -9, z: 2 },
@@ -399,13 +402,71 @@ function renderPlayerProfile() {
   const formatNumber = new Intl.NumberFormat();
 
   profileRank.textContent = String(playerProfile.rank || DEFAULT_PLAYER_PROFILE.rank);
-  profileLevelBadge.textContent = String(normalizeProfileNumber(playerProfile.level, DEFAULT_PLAYER_PROFILE.level, 1));
+  profileLevelBadge.textContent = String(normalizeProfileNumber(playerProfile.level, DEFAULT_PLAYER_PROFILE.level));
   profileXpBar.style.width = `${progress}%`;
   profileXpTrack.setAttribute("aria-valuemax", String(xpMax));
   profileXpTrack.setAttribute("aria-valuenow", String(xp));
   profileXpCopy.textContent = `${formatNumber.format(xp)} / ${formatNumber.format(xpMax)} XP`;
   profileCoins.textContent = formatNumber.format(normalizeProfileNumber(playerProfile.coins, DEFAULT_PLAYER_PROFILE.coins));
   profileGems.textContent = formatNumber.format(normalizeProfileNumber(playerProfile.gems, DEFAULT_PLAYER_PROFILE.gems));
+}
+
+function rankForLevel(level) {
+  if (level >= 20) return "Royal Trickster";
+  if (level >= 10) return "Court Jester";
+  if (level >= 5) return "Trickster";
+  if (level >= 1) return "Jester Initiate";
+  return "Unranked";
+}
+
+function addPlayerProgress({ xp = 0, coins = 0, gems = 0 } = {}) {
+  let level = normalizeProfileNumber(playerProfile.level, 0);
+  let currentXp = normalizeProfileNumber(playerProfile.xp, 0);
+  let xpMax = normalizeProfileNumber(playerProfile.xpMax, 100, 1);
+  currentXp += normalizeProfileNumber(xp, 0);
+
+  while (currentXp >= xpMax) {
+    currentXp -= xpMax;
+    level += 1;
+    xpMax = 100 + level * 25;
+  }
+
+  updatePlayerProfile({
+    level,
+    rank: rankForLevel(level),
+    xp: currentXp,
+    xpMax,
+    coins: normalizeProfileNumber(playerProfile.coins, 0) + normalizeProfileNumber(coins, 0),
+    gems: normalizeProfileNumber(playerProfile.gems, 0) + normalizeProfileNumber(gems, 0)
+  });
+  return { level, xp: currentXp, xpMax, coins, gems };
+}
+
+function loadAwardedMatches() {
+  try {
+    const entries = JSON.parse(localStorage.getItem(PROFILE_AWARDS_KEY) || "[]");
+    return Array.isArray(entries) ? entries.filter((entry) => typeof entry === "string").slice(-40) : [];
+  } catch {
+    return [];
+  }
+}
+
+function awardCompletedMatch(game) {
+  const seat = mySeat();
+  if (!game?.gameOver || !game.winner || seat !== 0 && seat !== 1) return null;
+  const matchIdentity = `${snapshot?.room?.code || "solo"}:${snapshot?.room?.startedAt || snapshot?.room?.joinedAt || "match"}`;
+  const awardKey = `${matchIdentity}:${game.winner}`;
+  const awardedMatches = loadAwardedMatches();
+  if (awardedMatches.includes(awardKey)) return null;
+
+  const won = game.winner === seat + 1;
+  const reward = won
+    ? { xp: 60, coins: 25, gems: 1 }
+    : { xp: 30, coins: 10, gems: 0 };
+  addPlayerProgress(reward);
+  awardedMatches.push(awardKey);
+  localStorage.setItem(PROFILE_AWARDS_KEY, JSON.stringify(awardedMatches.slice(-40)));
+  return { ...reward, won };
 }
 
 function updatePlayerProfile(updates = {}) {
@@ -433,10 +494,54 @@ const roomFromUrl = new URLSearchParams(window.location.search).get("room");
 if (roomFromUrl) roomCodeInput.value = roomFromUrl.toUpperCase();
 else if (savedRoomSession()?.code) roomCodeInput.value = savedRoomSession().code;
 
-function showScreen(name) {
+function activateScreen(name) {
   Object.values(screens).forEach((screen) => screen.classList.remove("active"));
-  screens[name]?.classList.add("active");
+  const nextScreen = screens[name];
+  nextScreen?.classList.add("active");
+  if (nextScreen) nextScreen.scrollTop = 0;
   settingsMenu.classList.remove("open");
+}
+
+function showScreen(name, options = {}) {
+  const nextScreen = screens[name];
+  if (!nextScreen || nextScreen.classList.contains("active")) return Promise.resolve(false);
+  if (screenTransitionActive) return Promise.resolve(false);
+
+  const trigger = options.trigger || null;
+  const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+  const buttonDelay = reduceMotion ? 0 : (Number.isFinite(options.delay) ? Math.max(0, options.delay) : (trigger ? 480 : 0));
+  if (trigger) bounceMenuTarget(trigger);
+  screenTransitionActive = true;
+  document.body.classList.add("navigation-locked");
+
+  return new Promise((resolve) => {
+    window.setTimeout(() => {
+      if (reduceMotion || !pageTransition) {
+        activateScreen(name);
+        options.onActivate?.();
+        screenTransitionActive = false;
+        document.body.classList.remove("navigation-locked");
+        resolve(true);
+        return;
+      }
+
+      pageTransition.classList.add("show");
+      pageTransition.setAttribute("aria-hidden", "false");
+      window.setTimeout(() => {
+        activateScreen(name);
+        options.onActivate?.();
+        nextScreen.classList.add("screen-entering");
+        window.requestAnimationFrame(() => pageTransition.classList.remove("show"));
+        window.setTimeout(() => {
+          nextScreen.classList.remove("screen-entering");
+          pageTransition.setAttribute("aria-hidden", "true");
+          screenTransitionActive = false;
+          document.body.classList.remove("navigation-locked");
+          resolve(true);
+        }, 430);
+      }, 260);
+    }, buttonDelay);
+  });
 }
 
 function setMenuStatus(text) {
@@ -516,7 +621,8 @@ function showMenuToast(text) {
 }
 
 function bounceMenuTarget(target) {
-  if (!target?.classList?.contains("tap-bounce")) return;
+  if (!target?.classList) return;
+  target.classList.add("tap-bounce");
   target.classList.remove("bump");
   void target.offsetWidth;
   target.classList.add("bump");
@@ -524,7 +630,6 @@ function bounceMenuTarget(target) {
 
 function handleMenuAction(action, target = null) {
   console.log(`Jester's Grid menu action: ${action}`);
-  bounceMenuTarget(target);
   const messages = {
     ranked: "Ranked mode is coming soon.",
     shop: "Shop is coming soon.",
@@ -541,16 +646,17 @@ function handleMenuAction(action, target = null) {
 
   if (action === "play" || action === "online") {
     setOnlineJoinOpen(false);
-    showScreen("online");
+    showScreen("online", { trigger: target });
     return;
   }
 
   if (action === "solo" || action === "decks") {
-    createBotRoom();
+    createBotRoom(target);
     return;
   }
 
-  showMenuToast(messages[action] || `${action} coming soon.`);
+  bounceMenuTarget(target);
+  window.setTimeout(() => showMenuToast(messages[action] || `${action} coming soon.`), 220);
 }
 
 function setLocalMessage(text) {
@@ -807,7 +913,7 @@ function rejoinActiveRoom(options = {}) {
     options.callback?.(ok, result);
     callbacks.forEach((callback) => callback(ok, result));
   };
-  sendEvent("joinRoom", { code, name, seat, heartbeat: !!options.silent }, (result) => {
+  sendEvent("joinRoom", { code, name, rank: playerProfile.rank, seat, heartbeat: !!options.silent }, (result) => {
     if (!result?.ok) {
       if (!options.silent) setMenuStatus(result?.message || "Could not rejoin room.");
       finishRejoin(false, result);
@@ -2469,7 +2575,7 @@ function createLocalGame(playerName) {
     lastMessage: "Offline quickplay begins. You go first."
   };
   game.players[0].name = playerName || "Jester";
-  game.players[0].rank = "Jester Initiate";
+  game.players[0].rank = playerProfile.rank || "Unranked";
   game.players[1].name = BOT_NAME;
   game.players[1].rank = BOT_RANK;
   drawUpToSix(game.players[0]);
@@ -2488,7 +2594,7 @@ function refreshLocalPlayerStats(game = currentGame()) {
     player.tokenTotal = countTokens(player.tokens);
     if (index === 0) {
       player.name = player.name || "Jester";
-      player.rank = player.rank || "Jester Initiate";
+      player.rank = player.rank || playerProfile.rank || "Unranked";
     } else {
       player.name = BOT_NAME;
       player.rank = BOT_RANK;
@@ -2525,6 +2631,7 @@ function performOfflineAction(action) {
   if (action.type === "restart") {
     const name = playerNameInput.value.trim() || game.players[0]?.name || "Jester";
     snapshot.game = createLocalGame(name);
+    snapshot.room.startedAt = Date.now();
     localMessage = "";
     resetRenderMemory();
     return ok();
@@ -3415,7 +3522,7 @@ function renderWaitingRoom() {
   waitingRoomCode.textContent = snapshot.room.code;
   document.getElementById("waitingNameOne").textContent = playerOne.name || "Player 1";
   document.getElementById("waitingNameTwo").textContent = playerTwo.connected ? (playerTwo.name || "Player 2") : "Awaiting Player";
-  document.getElementById("waitingRankOne").textContent = playerOne.rank || "Jester Initiate";
+  document.getElementById("waitingRankOne").textContent = playerOne.rank || "Unranked";
   document.getElementById("waitingRankTwo").textContent = playerTwo.rank || "Masked Challenger";
   document.getElementById("waitingAvatarOne").textContent = playerInitials(playerOne.name, "P1");
   document.getElementById("waitingAvatarTwo").textContent = playerTwo.connected ? playerInitials(playerTwo.name, "P2") : "P2";
@@ -3815,6 +3922,10 @@ function renderWin() {
     const winnerKey = `${snapshot?.room?.code || "local"}:${game.winner}`;
     if (announcedWinner !== winnerKey) {
       announcedWinner = winnerKey;
+      const reward = awardCompletedMatch(game);
+      if (reward) {
+        winText.textContent = `${reward.won ? "Victory" : "Match complete"}: +${reward.xp} XP, +${reward.coins} coins${reward.gems ? `, +${reward.gems} gem` : ""}.`;
+      }
       gameAudio.play("win");
       if (navigator.vibrate) navigator.vibrate([35, 45, 75]);
     }
@@ -3977,8 +4088,10 @@ function refreshActiveConnection() {
   if (activeRoomCode()) rejoinActiveRoom({ silent: true });
 }
 
-function createRoom() {
+function createRoom(target = null) {
   if (menuRequestInFlight) return;
+  const actionStartedAt = Date.now();
+  bounceMenuTarget(target);
   const name = playerNameInput.value.trim() || "Jester";
   localStorage.setItem("jg-name", name);
   primeRoomNotificationPermission();
@@ -3987,7 +4100,7 @@ function createRoom() {
     snapshot = null;
   }
   setMenuRequestBusy(true, "Opening a private court...");
-  sendEvent("createRoom", { name }, (result) => {
+  sendEvent("createRoom", { name, rank: playerProfile.rank }, (result) => {
     setMenuRequestBusy(false);
     if (!result?.ok) {
       gameAudio.play("error");
@@ -3999,48 +4112,56 @@ function createRoom() {
     window.history.replaceState(null, "", `?room=${result.code}`);
     startRoomHeartbeat();
     maybeRegisterRoomNotification(true);
-    showScreen("game");
+    const remainingDelay = Math.max(0, 480 - (Date.now() - actionStartedAt));
+    showScreen("game", { delay: remainingDelay });
   });
 }
 
-function createBotRoom() {
-  const name = playerNameInput.value.trim() || "Jester";
-  localStorage.setItem("jg-name", name);
-  window.clearTimeout(botTurnTimer);
-  if (snapshot?.room?.code && !isOfflineQuickplay()) {
-    sendEvent("leaveRoom", { code: snapshot.room.code, seat: mySeat() }, () => {});
-  }
-  stopPolling();
-  stopRoomHeartbeat();
-  forgetRoomSession();
-  snapshot = {
-    room: {
-      code: "",
-      mode: "quickplay",
-      offline: true,
-      phase: "playing",
-      ready: [true, true],
-      joinedAt: Date.now(),
-      startedAt: Date.now()
-    },
-    you: { seat: 0 },
-    game: createLocalGame(name)
-  };
-  renderRoomCode = "";
-  previousRoomPhase = "";
-  previousTurnSignature = "";
-  previousPlayerTwoConnected = true;
-  previousShowingTokens = false;
-  localMessage = "";
-  roomCodeInput.value = "";
-  autoJoinAttempted = true;
-  window.history.replaceState(null, "", window.location.pathname);
-  showScreen("game");
-  render();
+function createBotRoom(target = null) {
+  showScreen("game", {
+    trigger: target,
+    onActivate: () => {
+      const name = playerNameInput.value.trim() || "Jester";
+      localStorage.setItem("jg-name", name);
+      window.clearTimeout(botTurnTimer);
+      if (snapshot?.room?.code && !isOfflineQuickplay()) {
+        sendEvent("leaveRoom", { code: snapshot.room.code, seat: mySeat() }, () => {});
+      }
+      stopPolling();
+      stopRoomHeartbeat();
+      forgetRoomSession();
+      const startedAt = Date.now();
+      snapshot = {
+        room: {
+          code: "",
+          mode: "quickplay",
+          offline: true,
+          phase: "playing",
+          ready: [true, true],
+          joinedAt: startedAt,
+          startedAt
+        },
+        you: { seat: 0 },
+        game: createLocalGame(name)
+      };
+      renderRoomCode = "";
+      previousRoomPhase = "";
+      previousTurnSignature = "";
+      previousPlayerTwoConnected = true;
+      previousShowingTokens = false;
+      localMessage = "";
+      roomCodeInput.value = "";
+      autoJoinAttempted = true;
+      window.history.replaceState(null, "", window.location.pathname);
+      render();
+    }
+  });
 }
 
-function joinRoom() {
+function joinRoom(target = null) {
   if (menuRequestInFlight) return;
+  const actionStartedAt = Date.now();
+  bounceMenuTarget(target);
   const name = playerNameInput.value.trim() || "Jester";
   const code = roomCodeInput.value.trim().toUpperCase();
   if (!code) {
@@ -4054,7 +4175,7 @@ function joinRoom() {
     snapshot = null;
   }
   setMenuRequestBusy(true, "Finding the room...");
-  sendEvent("joinRoom", { code, name }, (result) => {
+  sendEvent("joinRoom", { code, name, rank: playerProfile.rank }, (result) => {
     setMenuRequestBusy(false);
     if (!result?.ok) {
       gameAudio.play("error");
@@ -4064,11 +4185,12 @@ function joinRoom() {
     rememberRoomSession(result.code || code, result.seat ?? result.snapshot?.you?.seat ?? 1);
     window.history.replaceState(null, "", `?room=${code}`);
     startRoomHeartbeat();
-    showScreen("game");
+    const remainingDelay = Math.max(0, 480 - (Date.now() - actionStartedAt));
+    showScreen("game", { delay: remainingDelay });
   });
 }
 
-function leaveRoom() {
+function leaveRoom(target = null) {
   const code = snapshot?.room?.code;
   const seat = mySeat();
   window.clearTimeout(botTurnTimer);
@@ -4086,7 +4208,7 @@ function leaveRoom() {
   roomCodeInput.value = "";
   autoJoinAttempted = true;
   window.history.replaceState(null, "", window.location.pathname);
-  showScreen("menu");
+  showScreen("menu", { trigger: target });
 }
 
 function pushNotificationsSupported() {
@@ -4221,26 +4343,29 @@ playerNameInput.addEventListener("input", () => {
   localStorage.setItem("jg-name", playerProfile.name);
   savePlayerProfile();
 });
-document.getElementById("createRoomBtn").addEventListener("click", createRoom);
-document.getElementById("joinRoomBtn").addEventListener("click", joinRoom);
-onlineBackBtn.addEventListener("click", () => {
+document.getElementById("createRoomBtn").addEventListener("click", (event) => createRoom(event.currentTarget));
+document.getElementById("joinRoomBtn").addEventListener("click", (event) => joinRoom(event.currentTarget));
+onlineBackBtn.addEventListener("click", (event) => {
   setOnlineJoinOpen(false);
-  showScreen("menu");
+  showScreen("menu", { trigger: event.currentTarget });
 });
-onlineJoinRevealBtn.addEventListener("click", () => setOnlineJoinOpen(true));
+onlineJoinRevealBtn.addEventListener("click", (event) => {
+  bounceMenuTarget(event.currentTarget);
+  window.setTimeout(() => setOnlineJoinOpen(true), 260);
+});
 roomCodeInput.addEventListener("input", () => {
   roomCodeInput.value = roomCodeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
 });
 roomCodeInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") joinRoom();
 });
-document.getElementById("rulesBtn").addEventListener("click", () => {
+document.getElementById("rulesBtn").addEventListener("click", (event) => {
   rulesReturnScreen = screens.online.classList.contains("active") ? "online" : "menu";
-  showScreen("rules");
+  showScreen("rules", { trigger: event.currentTarget });
 });
-document.getElementById("backRules").addEventListener("click", () => showScreen(snapshot ? "game" : rulesReturnScreen));
-document.getElementById("backToMenu").addEventListener("click", () => showScreen("menu"));
-waitingBackBtn.addEventListener("click", leaveRoom);
+document.getElementById("backRules").addEventListener("click", (event) => showScreen(snapshot ? "game" : rulesReturnScreen, { trigger: event.currentTarget }));
+document.getElementById("backToMenu").addEventListener("click", (event) => showScreen("menu", { trigger: event.currentTarget }));
+waitingBackBtn.addEventListener("click", (event) => leaveRoom(event.currentTarget));
 document.getElementById("resetBtn").addEventListener("click", () => {
   if (snapshot) sendAction({ type: "restart" });
 });
@@ -4331,9 +4456,9 @@ document.getElementById("settingsHistoryBtn").addEventListener("click", () => {
   setLocalMessage("Match history is local to this live room.");
   settingsMenu.classList.remove("open");
 });
-document.getElementById("settingsTutorialBtn").addEventListener("click", () => {
+document.getElementById("settingsTutorialBtn").addEventListener("click", (event) => {
   settingsMenu.classList.remove("open");
-  showScreen("rules");
+  showScreen("rules", { trigger: event.currentTarget });
 });
 document.getElementById("playAgainBtn").addEventListener("click", () => sendAction({ type: "restart" }));
 

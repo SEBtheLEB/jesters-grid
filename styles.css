@@ -5500,6 +5500,8 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   aspect-ratio: auto;
   position: relative;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   place-items: start center;
   overflow: visible;
 }
@@ -5525,6 +5527,9 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   width: min(58%, 242px);
   min-width: 0;
   align-self: start;
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: center;
   display: grid;
   justify-items: center;
   gap: 0;
@@ -5607,9 +5612,9 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   margin: 0;
   color: #151a1d;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(23px, 7.2vw, 34px);
+  font-size: clamp(24px, 4svh, 34px);
   font-weight: 900;
-  line-height: .9;
+  line-height: 1;
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -5620,9 +5625,9 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   display: flex;
   margin-top: -6px;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(39px, 11vw, 53px);
+  font-size: clamp(39px, 6svh, 53px);
   font-weight: 900;
-  line-height: .9;
+  line-height: 1.1;
   letter-spacing: 0;
   -webkit-text-stroke: 1px #211812;
   text-shadow: 0 3px 0 #15191d;
@@ -5631,18 +5636,6 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 .title-grid-word i { font-style: normal; }
 .title-grid-word i:nth-child(odd) { color: #ad3d2d; }
 .title-grid-word i:nth-child(even) { color: #24558a; }
-
-.layered-home-hero .home-tagline {
-  width: min(100%, 216px);
-  margin-top: 7px;
-  color: #efd39a;
-  font-family: "Segoe Print", "Bradley Hand", "Trebuchet MS", sans-serif;
-  font-size: clamp(8px, 2.45vw, 11px);
-  font-weight: 700;
-  line-height: 1.25;
-  letter-spacing: 0;
-  text-shadow: 0 2px 2px #0b1015;
-}
 
 .hero-spark,
 .card-spark {
@@ -5777,7 +5770,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   height: 23px;
   color: #e8cd97;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(17px, 4.8vw, 22px);
+  font-size: clamp(17px, 2.7svh, 22px);
   letter-spacing: 0;
 }
 
@@ -5788,8 +5781,8 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 .layered-profile .profile-meta {
   color: #d9bd88;
   font-family: "Segoe Print", "Bradley Hand", "Trebuchet MS", sans-serif;
-  font-size: clamp(8px, 2.2vw, 10px);
-  line-height: 1;
+  font-size: clamp(8px, 1.25svh, 10px);
+  line-height: 1.55;
   letter-spacing: 0;
   text-transform: none;
 }
@@ -5816,7 +5809,8 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 .layered-profile .xp-copy {
   color: #d9bd88;
   font-family: "Segoe Print", "Bradley Hand", "Trebuchet MS", sans-serif;
-  font-size: clamp(7px, 1.95vw, 9px);
+  font-size: clamp(7px, 1.05svh, 9px);
+  line-height: 1.5;
   text-align: center;
 }
 
@@ -5834,7 +5828,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   grid-template-columns: 20px minmax(0, 1fr) 22px;
   color: #e7cb93;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(11px, 3vw, 14px);
+  font-size: clamp(11px, 1.7svh, 14px);
 }
 
 .layered-profile .currency-icon {
@@ -5909,7 +5903,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   max-width: 100%;
   color: #14191c;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(17px, 4.7vw, 22px);
+  font-size: clamp(17px, 2.7svh, 22px);
   font-weight: 900;
   line-height: 1;
   letter-spacing: 0;
@@ -5937,9 +5931,9 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   z-index: 3;
   color: rgba(24, 25, 26, .75);
   font-family: "Segoe Print", "Bradley Hand", "Trebuchet MS", sans-serif;
-  font-size: clamp(7px, 2vw, 9px);
+  font-size: clamp(7px, 1.15svh, 9px);
   font-weight: 900;
-  line-height: 1;
+  line-height: 1.25;
   letter-spacing: 0;
   text-transform: uppercase;
   transition: transform .32s ease;
@@ -6046,9 +6040,9 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   max-width: 100%;
   color: #e6ca91;
   font-family: "Segoe Print", "Bradley Hand", "Trebuchet MS", sans-serif;
-  font-size: clamp(6px, 1.7vw, 8px);
+  font-size: clamp(6px, .95svh, 8px);
   font-weight: 900;
-  line-height: 1;
+  line-height: 1.3;
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -6189,6 +6183,90 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   .card-spark,
   .currency-plus {
     animation: none !important;
+  }
+}
+
+/* Shared navigation transition. Buttons finish their tactile motion before the
+   veil covers the outgoing screen, then the next screen settles into place. */
+.page-transition {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(circle at 50% 46%, rgba(47, 79, 112, .22), transparent 34%),
+    rgba(5, 12, 20, .96);
+  transition: opacity .28s ease, visibility 0s linear .28s;
+}
+
+.page-transition.show {
+  visibility: visible;
+  pointer-events: auto;
+  opacity: 1;
+  transition: opacity .28s ease, visibility 0s;
+}
+
+.page-transition-mark {
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  color: #e7cb93;
+  opacity: 0;
+  transform: translateY(8px) scale(.86);
+  transition: opacity .24s ease, transform .36s cubic-bezier(.2, .85, .2, 1);
+}
+
+.page-transition.show .page-transition-mark {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.page-transition-mark span {
+  width: 30px;
+  aspect-ratio: 1;
+  border: 2px solid #d4a444;
+  background: linear-gradient(135deg, #a23d31 0 50%, #255786 50%);
+  box-shadow: 0 0 0 4px rgba(6, 13, 21, .92), 0 0 0 5px rgba(212, 164, 68, .45), 0 8px 18px rgba(0, 0, 0, .46);
+  transform: rotate(45deg);
+  animation: transitionMarkPulse 1.1s ease-in-out infinite;
+}
+
+.page-transition-mark strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 17px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+body.navigation-locked .screen.active {
+  pointer-events: none;
+}
+
+.screen.active.screen-entering {
+  animation: screenEnter .46s cubic-bezier(.2, .84, .2, 1) both;
+}
+
+@keyframes transitionMarkPulse {
+  0%, 100% { transform: rotate(45deg) scale(.92); filter: brightness(.92); }
+  50% { transform: rotate(45deg) scale(1.08); filter: brightness(1.18); }
+}
+
+@keyframes screenEnter {
+  from { opacity: 0; transform: translateY(8px) scale(.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-transition,
+  .page-transition-mark,
+  .page-transition-mark span,
+  .screen.active.screen-entering {
+    animation: none !important;
+    transition: none !important;
   }
 }
 

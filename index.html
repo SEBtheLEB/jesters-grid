@@ -8,7 +8,7 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/icon.svg" />
-  <link rel="stylesheet" href="/styles.css?v=32" />
+  <link rel="stylesheet" href="/styles.css?v=33" />
   <link rel="stylesheet" href="/assets/skins/default/skin.css?v=24" />
 </head>
 <body data-theme="dark">
@@ -36,7 +36,6 @@
               <span class="title-hat" aria-hidden="true"><i></i><i></i><i></i></span>
               <div class="title-parchment"><h1>Jester's</h1></div>
               <strong class="title-grid-word" aria-label="Grid"><i>G</i><i>R</i><i>I</i><i>D</i></strong>
-              <p class="home-tagline">Where every step is a joke,<br>and every joke changes fate.</p>
               <i class="hero-spark hero-spark-one" aria-hidden="true"></i>
               <i class="hero-spark hero-spark-two" aria-hidden="true"></i>
               <i class="hero-spark hero-spark-three" aria-hidden="true"></i>
@@ -48,28 +47,28 @@
             <div class="profile-avatar" aria-label="Player avatar">
               <span class="profile-avatar-frame asset-slot" data-asset-img="roundButtonFrame" aria-hidden="true"><img class="asset-img" alt="" /></span>
               <span class="avatar-jester" aria-hidden="true"><i></i></span>
-              <strong id="profileLevelBadge">14</strong>
+              <strong id="profileLevelBadge">0</strong>
             </div>
             <div class="profile-copy">
               <label class="visually-hidden" for="playerName">Player name</label>
               <input id="playerName" class="profile-name-input" maxlength="18" autocomplete="nickname" value="Jester" />
               <div class="profile-meta">
-                <span>Rank: <strong id="profileRank">Trickster</strong></span>
+                <span>Rank: <strong id="profileRank">Unranked</strong></span>
               </div>
-              <div id="profileXpTrack" class="xp-track" role="progressbar" aria-label="Experience" aria-valuemin="0" aria-valuemax="1000" aria-valuenow="350">
+              <div id="profileXpTrack" class="xp-track" role="progressbar" aria-label="Experience" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                 <span id="profileXpBar"></span>
               </div>
-              <div id="profileXpCopy" class="xp-copy">350 / 1000 XP</div>
+              <div id="profileXpCopy" class="xp-copy">0 / 100 XP</div>
             </div>
             <div class="currency-stack" aria-label="Currencies">
               <div class="currency-row">
                 <span class="currency-icon coin-icon" aria-hidden="true"></span>
-                <strong id="profileCoins">1,250</strong>
+                <strong id="profileCoins">0</strong>
                 <button class="currency-plus tap-bounce" data-menu-action="coins" type="button" aria-label="Open coin shop">+</button>
               </div>
               <div class="currency-row">
                 <span class="currency-icon gem-icon" aria-hidden="true"></span>
-                <strong id="profileGems">340</strong>
+                <strong id="profileGems">0</strong>
                 <button class="currency-plus tap-bounce" data-menu-action="gems" type="button" aria-label="Open gem shop">+</button>
               </div>
             </div>
@@ -116,7 +115,7 @@
     <section id="onlineScreen" class="screen online-screen">
       <div class="online-shell">
         <header class="online-header">
-          <button id="onlineBackBtn" class="online-back-button" type="button" aria-label="Back to main menu">Back</button>
+          <button id="onlineBackBtn" class="online-back-button tap-bounce" type="button" aria-label="Back to main menu">Back</button>
           <div class="online-heading">
             <span>Private Court</span>
             <h1>Online Duel</h1>
@@ -130,13 +129,13 @@
         </div>
 
         <section class="online-choice-panel" aria-label="Online duel options">
-          <button class="online-choice-card create-choice" id="createRoomBtn" type="button">
+          <button class="online-choice-card create-choice tap-bounce" id="createRoomBtn" type="button">
             <span class="online-choice-kicker">Open a private court</span>
             <strong>Create Duel</strong>
             <span>Get a room code to share with another player.</span>
           </button>
 
-          <button class="online-choice-card join-choice" id="onlineJoinRevealBtn" type="button" aria-expanded="false" aria-controls="onlineJoinForm">
+          <button class="online-choice-card join-choice tap-bounce" id="onlineJoinRevealBtn" type="button" aria-expanded="false" aria-controls="onlineJoinForm">
             <span class="online-choice-kicker">Enter an invitation</span>
             <strong>Join Duel</strong>
             <span>Use the five-character code from your opponent.</span>
@@ -146,14 +145,14 @@
             <label for="roomCodeInput">Room Code</label>
             <div class="online-code-row">
               <input id="roomCodeInput" class="online-code-input" maxlength="6" placeholder="CODE" autocomplete="off" inputmode="text" />
-              <button class="online-join-submit" id="joinRoomBtn" type="button">Join</button>
+              <button class="online-join-submit tap-bounce" id="joinRoomBtn" type="button">Join</button>
             </div>
           </div>
 
           <p id="menuStatus" class="online-status" aria-live="polite">Choose how you want to enter the court.</p>
         </section>
 
-        <button class="online-rules-button" id="rulesBtn" type="button">Rules</button>
+        <button class="online-rules-button tap-bounce" id="rulesBtn" type="button">Rules</button>
         <button class="visually-hidden" id="resetBtn" type="button" tabindex="-1">New Match</button>
       </div>
     </section>
@@ -177,7 +176,7 @@
               <div class="waiting-avatar" id="waitingAvatarOne">P1</div>
               <div class="waiting-player-copy">
                 <strong id="waitingNameOne">Player 1</strong>
-                <span id="waitingRankOne">Jester Initiate</span>
+                <span id="waitingRankOne">Unranked</span>
               </div>
               <span id="waitingReadyOne" class="ready-pill">Waiting</span>
             </article>
@@ -197,14 +196,14 @@
           <div id="waitingJoinBanner" class="join-banner">Player 2 has joined the court.</div>
           <p id="waitingStatus" class="waiting-status">Share the room code with your opponent.</p>
           <button id="readyBtn" class="big-button ready-button">Ready</button>
-          <button id="waitingBackBtn" class="small-button waiting-back-button">Back to Menu</button>
+          <button id="waitingBackBtn" class="small-button waiting-back-button tap-bounce">Back to Menu</button>
         </div>
       </section>
 
       <div id="gameShell" class="game-shell">
         <header class="top-hud">
           <div class="match-header">
-            <button class="icon-medallion" id="backToMenu" aria-label="Back to menu">Menu</button>
+            <button class="icon-medallion tap-bounce" id="backToMenu" aria-label="Back to menu">Menu</button>
             <div class="title-frame">
               <div class="match-title">Jester's Grid</div>
             </div>
@@ -244,7 +243,7 @@
               <div class="avatar-frame">You</div>
               <div class="identity-block">
                 <div class="identity-name" id="playerNameLabel">You</div>
-                <div class="identity-title" id="playerTitle">Jester Initiate</div>
+                <div class="identity-title" id="playerTitle">Unranked</div>
                 <div class="player-meters">
                   <span class="meter-chip">HP 20</span>
                   <span class="meter-chip" id="playerInfo">Cards 0 - Tokens 0</span>
@@ -336,6 +335,13 @@
     </div>
   </main>
 
-  <script src="/client.js?v=32"></script>
+  <div id="pageTransition" class="page-transition" aria-hidden="true">
+    <div class="page-transition-mark" aria-hidden="true">
+      <span></span>
+      <strong>Jester's Grid</strong>
+    </div>
+  </div>
+
+  <script src="/client.js?v=33"></script>
 </body>
 </html>

@@ -79,7 +79,7 @@ const TOKEN_TYPES = [
   { id: "potion", count: 2 },
   { id: "parry", count: 1 }
 ];
-const VISUAL_RANKS = ["Jester Initiate", "Masked Challenger"];
+const VISUAL_RANKS = ["Unranked", "Masked Challenger"];
 const BOT_NAME = "Clockwork Jester";
 const BOT_RANK = "Gilded Automaton";
 const WIN_LINES = [
@@ -208,7 +208,7 @@ async function handleApiRequest(req, res, url) {
     const body = await readJsonBody(req);
     if (url.pathname === "/api/create-room") {
       const clientId = cleanClientId(body.clientId);
-      const room = await createPersistedRoom((code) => createRoomState(code, cleanName(body.name, "Player 1"), clientId));
+      const room = await createPersistedRoom((code) => createRoomState(code, cleanName(body.name, "Player 1"), clientId, cleanName(body.rank, "Unranked")));
       const code = room.code;
       sendJsonResponse(res, { ok: true, code, seat: 0, snapshot: snapshotFor(room, 0) });
       return;
@@ -227,7 +227,7 @@ async function handleApiRequest(req, res, url) {
       const mutation = await mutateRoom(body.code, (room) => {
         const wasDisconnected = room.players.some((player) => player.clientId === stableClientId && !isSeatConnected(room, room.players.indexOf(player)));
         const wasPlayerTwoConnected = isSeatConnected(room, 1);
-        const seat = claimSeat(room, stableClientId, body.name, body.seat);
+        const seat = claimSeat(room, stableClientId, body.name, body.seat, body.rank);
         if (seat === null) return { result: fail("Room is full."), seat: null, skipSave: true };
         return {
           result: ok(),
@@ -664,7 +664,7 @@ async function handleClientMessage(client, raw) {
   const { id, event, payload } = message;
   if (event === "createRoom") {
     const stableClientId = cleanClientId(payload?.clientId);
-    const room = await createPersistedRoom((code) => createRoomState(code, cleanName(payload?.name, "Player 1"), stableClientId));
+    const room = await createPersistedRoom((code) => createRoomState(code, cleanName(payload?.name, "Player 1"), stableClientId, cleanName(payload?.rank, "Unranked")));
     const code = room.code;
     client.clientId = stableClientId;
     client.roomCode = code;
@@ -691,7 +691,7 @@ async function handleClientMessage(client, raw) {
     const mutation = await mutateRoom(payload?.code, (room) => {
       const wasDisconnected = room.players.some((player, index) => player.clientId === stableClientId && !isSeatConnected(room, index));
       const wasPlayerTwoConnected = isSeatConnected(room, 1);
-      const seat = claimSeat(room, stableClientId, payload?.name, payload?.seat);
+      const seat = claimSeat(room, stableClientId, payload?.name, payload?.seat, payload?.rank);
       if (seat === null) return { result: fail("Room is full."), seat: null, skipSave: true };
       return {
         result: ok(),
@@ -872,7 +872,7 @@ function makeSeat(id, name, clientId, rank) {
   };
 }
 
-function createRoomState(code, playerName, clientId) {
+function createRoomState(code, playerName, clientId, playerRank = "Unranked") {
   return {
     code,
     mode: "room",
@@ -887,7 +887,7 @@ function createRoomState(code, playerName, clientId) {
     lastJoinNotificationAt: [0, 0],
     recentActions: [],
     players: [
-      makeSeat(1, playerName, clientId),
+      makeSeat(1, playerName, clientId, playerRank),
       makeSeat(2, "Player 2", null)
     ],
     game: newGame(false)
@@ -919,13 +919,14 @@ function cleanName(value, fallback) {
   return cleaned || fallback;
 }
 
-function claimSeat(room, clientId, name, requestedSeat = null) {
+function claimSeat(room, clientId, name, requestedSeat = null, rank = "Unranked") {
   const existingIndex = room.players.findIndex((seat) => seat.clientId === clientId);
   if (existingIndex >= 0) {
     const wasDisconnected = !room.players[existingIndex].connected;
     room.players[existingIndex].connected = true;
     room.players[existingIndex].lastSeenAt = Date.now();
     room.players[existingIndex].name = cleanName(name, `Player ${existingIndex + 1}`);
+    room.players[existingIndex].rank = cleanName(rank, room.players[existingIndex].rank || "Unranked");
     if (wasDisconnected) setMessage(room.game, `${room.players[existingIndex].name} reconnected.`);
     return existingIndex;
   }
@@ -934,24 +935,25 @@ function claimSeat(room, clientId, name, requestedSeat = null) {
   if (preferredSeat !== null) {
     const player = room.players[preferredSeat];
     if (player && !player.connected && !player.clientId) {
-      assignSeat(room, preferredSeat, clientId, name);
+      assignSeat(room, preferredSeat, clientId, name, rank);
       return preferredSeat;
     }
   }
 
   const openIndex = room.players.findIndex((seat) => !seat.connected && !seat.clientId);
   if (openIndex >= 0) {
-    assignSeat(room, openIndex, clientId, name);
+    assignSeat(room, openIndex, clientId, name, rank);
     return openIndex;
   }
   return null;
 }
 
-function assignSeat(room, seatIndex, clientId, name) {
+function assignSeat(room, seatIndex, clientId, name, rank = "Unranked") {
   room.players[seatIndex].clientId = clientId;
   room.players[seatIndex].connected = true;
   room.players[seatIndex].lastSeenAt = Date.now();
   room.players[seatIndex].name = cleanName(name, `Player ${seatIndex + 1}`);
+  room.players[seatIndex].rank = cleanName(rank, "Unranked");
   if (room.phase !== "playing") room.ready[seatIndex] = false;
   room.joinedAt = Date.now();
   setMessage(room.game, `${room.players[seatIndex].name} joined as Player ${seatIndex + 1}.`);
