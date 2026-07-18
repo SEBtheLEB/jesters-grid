@@ -4583,3 +4583,377 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
     min-height: 18px;
   }
 }
+
+/* Reference-authentic illustrated home skin. The supplied menu art remains the
+   visual source while semantic controls stay interactive above each slice. */
+.menu-content.home-shell {
+  --reference-paper: #e7c992;
+  --reference-ink: #11171d;
+  --reference-red: #b33e2d;
+  --reference-blue: #24558a;
+  --reference-gold: #d6a340;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(3px, .7svh, 7px);
+  padding:
+    env(safe-area-inset-top, 0px)
+    0
+    env(safe-area-inset-bottom, 0px);
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 38% 14%, rgba(255, 255, 255, .035), transparent 30%),
+    repeating-linear-gradient(8deg, rgba(255, 255, 255, .015) 0 1px, transparent 1px 5px),
+    #121920;
+}
+
+.menu-content.home-shell::before {
+  opacity: .34;
+  background:
+    radial-gradient(circle at 16% 18%, rgba(214, 163, 64, .08), transparent 24%),
+    radial-gradient(circle at 83% 36%, rgba(36, 85, 138, .1), transparent 27%),
+    linear-gradient(90deg, rgba(0, 0, 0, .28), transparent 7%, transparent 93%, rgba(0, 0, 0, .28));
+}
+
+.reference-slice {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+
+.reference-slice img {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  max-width: none;
+  height: auto;
+  display: block;
+  pointer-events: none;
+}
+
+.home-hero {
+  order: 1;
+  width: 100%;
+  min-height: 0;
+  aspect-ratio: 1024 / 720;
+  display: block;
+  flex: 0 0 auto;
+  overflow: hidden;
+}
+
+.reference-hero-slice img {
+  top: 0;
+}
+
+.home-hero > :not(.reference-hero-slice) {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.home-corner-bar {
+  position: absolute;
+  top: env(safe-area-inset-top, 0px);
+  left: 0;
+  right: 0;
+  z-index: 14;
+  width: 100%;
+  min-height: 0;
+  aspect-ratio: 1024 / 720;
+  display: block;
+  pointer-events: none;
+}
+
+.home-corner-button {
+  position: absolute;
+  top: 1.4%;
+  width: 15.5%;
+  min-width: 0;
+  max-width: none;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: transparent;
+  opacity: .01;
+  pointer-events: auto;
+}
+
+.home-corner-button:first-child {
+  left: 1.1%;
+}
+
+.home-corner-button:last-child {
+  right: 1.1%;
+}
+
+.home-corner-button:focus-visible,
+.menu-card:focus-visible,
+.reference-icon-menu .home-icon-button:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--reference-paper);
+  outline-offset: -3px;
+  background: rgba(214, 163, 64, .14);
+}
+
+.profile-panel {
+  order: 2;
+  width: 100%;
+  min-height: 0;
+  aspect-ratio: 1024 / 205;
+  display: block;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+  background: transparent;
+  box-shadow: none;
+}
+
+.reference-profile-slice img {
+  top: -350%;
+}
+
+.profile-panel > .reference-profile-slice {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.profile-panel::before,
+.profile-panel::after {
+  display: none;
+}
+
+.profile-panel > :not(.reference-profile-slice) {
+  position: absolute;
+  z-index: 2;
+  opacity: 0;
+}
+
+.profile-panel .profile-avatar {
+  left: 7%;
+  top: 14%;
+}
+
+.profile-panel .profile-copy {
+  left: 24%;
+  top: 14%;
+  width: 35%;
+}
+
+.profile-panel .currency-stack {
+  top: 13%;
+  right: 5%;
+  width: 28%;
+  height: 72%;
+  pointer-events: auto;
+}
+
+.home-main-actions {
+  order: 3;
+  position: relative;
+  width: 100%;
+  min-height: 0;
+  aspect-ratio: 1024 / 320;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.6%;
+  flex: 0 0 auto;
+  padding: 0 4.8%;
+  overflow: hidden;
+}
+
+.reference-actions-slice img {
+  top: -294%;
+}
+
+.home-main-actions .menu-card {
+  z-index: 2;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  aspect-ratio: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  color: transparent;
+  background: transparent;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.home-main-actions .menu-card::before,
+.home-main-actions .menu-card::after,
+.home-main-actions .menu-card > * {
+  opacity: 0;
+}
+
+.home-main-actions .menu-card:hover,
+.home-main-actions .menu-card.bump {
+  transform: translateY(-2px) scale(1.015);
+  background: rgba(241, 200, 106, .1);
+  box-shadow: inset 0 0 0 2px rgba(255, 228, 164, .7), 0 6px 14px rgba(0, 0, 0, .3);
+}
+
+.reference-icon-menu {
+  order: 4;
+  position: relative;
+  width: 100%;
+  min-height: 0;
+  aspect-ratio: 1024 / 266;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0;
+  flex: 0 0 auto;
+  padding: 0 3.2%;
+  overflow: hidden;
+}
+
+.reference-bottom-slice img {
+  top: -477.5%;
+}
+
+.reference-icon-menu .home-icon-button {
+  z-index: 2;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  color: transparent;
+  background: transparent;
+  box-shadow: none;
+  opacity: .01;
+}
+
+.reference-icon-menu .home-icon-button span {
+  opacity: 0;
+}
+
+.reference-icon-menu .home-icon-button:hover,
+.reference-icon-menu .home-icon-button.bump {
+  opacity: 1;
+  background: radial-gradient(circle, rgba(241, 200, 106, .16), transparent 68%);
+  transform: translateY(-2px) scale(1.04);
+}
+
+.home-play-panel {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+  z-index: 90;
+  width: min(408px, calc(100vw - 20px));
+  max-height: 0;
+  margin: 0;
+  padding: 0 10px;
+  border: 2px solid transparent;
+  border-radius: 14px;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+  transform: translate(-50%, 16px) scale(.97);
+  transform-origin: bottom center;
+  background:
+    linear-gradient(#111921, #111921) padding-box,
+    linear-gradient(135deg, #e8ce98, #7c5523 38%, #e8ce98 62%, #8c6229) border-box;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .7), inset 0 0 0 1px rgba(234, 205, 145, .22);
+  transition: max-height .42s cubic-bezier(.22, .8, .2, 1), opacity .24s ease, transform .42s cubic-bezier(.22, .8, .2, 1), padding .3s ease;
+}
+
+.home-play-panel.open {
+  max-height: min(62svh, 520px);
+  padding: 10px;
+  border-color: transparent;
+  opacity: 1;
+  pointer-events: auto;
+  overflow-y: auto;
+  transform: translate(-50%, 0) scale(1);
+}
+
+.home-play-panel .menu-tab,
+.home-play-panel .big-button,
+.home-play-panel .small-button,
+.home-play-panel .text-input {
+  border-color: #c99a3e;
+  border-radius: 7px;
+  color: #f0d59f;
+  background: #101a25;
+  font-family: "Segoe Print", "Bradley Hand", "Trebuchet MS", sans-serif;
+  letter-spacing: 0;
+}
+
+.home-play-panel .menu-tab.active,
+.home-play-panel .big-button,
+.home-play-panel .small-button.red {
+  color: #17191c;
+  background:
+    repeating-linear-gradient(7deg, rgba(70, 45, 17, .07) 0 1px, transparent 1px 5px),
+    #e4c58e;
+}
+
+.home-status,
+.home-play-panel .bot-copy,
+.home-play-panel .bot-copy strong,
+.home-play-panel .bot-copy em {
+  color: #ead09b;
+  font-family: "Segoe Print", "Bradley Hand", "Trebuchet MS", sans-serif;
+  letter-spacing: 0;
+}
+
+.menu-toast {
+  color: #17191c;
+  border-color: #2d2115;
+  border-radius: 8px;
+  background:
+    repeating-linear-gradient(8deg, rgba(45, 30, 13, .06) 0 1px, transparent 1px 4px),
+    #e5c78f;
+  font-family: "Segoe Print", "Bradley Hand", "Trebuchet MS", sans-serif;
+  letter-spacing: 0;
+}
+
+/* Luna and Jax stay available as identity art beyond the home screen. */
+.waiting-avatar,
+.avatar-frame {
+  color: transparent;
+  background-color: #17222c;
+  background-image: url("/assets/ui/luna-jax-character-reference.png");
+  background-repeat: no-repeat;
+  background-size: 300% auto;
+}
+
+#waitingAvatarOne,
+.player-panel .avatar-frame {
+  background-position: 28% 0;
+}
+
+#waitingAvatarTwo,
+.opponent-panel .avatar-frame {
+  background-position: 69% 0;
+}
+
+@media (max-height: 760px) {
+  .menu-content.home-shell {
+    gap: 2px;
+  }
+
+  .home-hero {
+    aspect-ratio: 1024 / 680;
+  }
+
+  .reference-hero-slice img {
+    top: -1.5%;
+  }
+
+}
+
+@media (min-width: 481px) {
+  .menu-content.home-shell {
+    border-left: 1px solid rgba(214, 163, 64, .24);
+    border-right: 1px solid rgba(214, 163, 64, .24);
+  }
+}

@@ -71,11 +71,13 @@ const CARD_DETAILS = {
 
 // Add your custom PNG paths here. Leave empty to use the CSS fallback artwork.
 const UI_ASSETS = {
+  menuReference: "/assets/ui/jgrid-menu-reference-v2.png",
+  characterReference: "/assets/ui/luna-jax-character-reference.png",
   logoBanner: "",
   titleBacking: "",
   girlJester: "",
   boyJester: "",
-  heroMascots: "/assets/ui/home-jesters.png",
+  heroMascots: "",
   playerAvatar: "",
   profileFrame: "",
   playCard: "",

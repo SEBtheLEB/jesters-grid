@@ -1,10 +1,11 @@
-const CACHE_NAME = "jesters-grid-pwa-v27";
+const CACHE_NAME = "jesters-grid-pwa-v28";
 const APP_ASSETS = [
   "/",
   "/index.html",
   "/styles.css",
   "/assets/skins/default/skin.css",
-  "/assets/ui/home-jesters.png",
+  "/assets/ui/jgrid-menu-reference-v2.png",
+  "/assets/ui/luna-jax-character-reference.png",
   "/client.js",
   "/manifest.webmanifest",
   "/icon.svg"
