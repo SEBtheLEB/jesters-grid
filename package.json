@@ -4,7 +4,9 @@
   "description": "Online 1v1 realtime version of Jester's Grid.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "check": "node --check server.js && node --check client.js",
+    "test:multiplayer": "node scripts/multiplayer-smoke.js"
   },
   "keywords": [
     "browser-game",

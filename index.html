@@ -8,8 +8,8 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/icon.svg" />
-  <link rel="stylesheet" href="/styles.css?v=22" />
-  <link rel="stylesheet" href="/assets/skins/default/skin.css?v=22" />
+  <link rel="stylesheet" href="/styles.css?v=27" />
+  <link rel="stylesheet" href="/assets/skins/default/skin.css?v=23" />
 </head>
 <body data-theme="dark">
   <main class="phone">
@@ -27,6 +27,7 @@
         </div>
 
         <section class="home-hero" aria-label="Jester's Grid">
+          <div class="home-hero-art asset-slot" data-asset-bg="heroMascots" aria-hidden="true"></div>
           <div class="mascot-slot mascot-left asset-slot fallback-frame soft-breathe" data-asset-img="girlJester">
             <img class="asset-img" alt="Girl jester mascot" />
             <div class="mascot-fallback mascot-girl" aria-hidden="true">
@@ -89,20 +90,20 @@
         </section>
 
         <section class="home-main-actions" aria-label="Main actions">
-          <button id="playMenuCard" class="menu-card asset-slot fallback-frame card-hover tap-bounce" data-menu-action="play" data-asset-bg="playCard" type="button">
+          <button id="playMenuCard" class="menu-card asset-slot fallback-frame card-hover tap-bounce" data-menu-action="online" data-asset-bg="playCard" type="button">
             <span class="menu-card-icon play-card-icon">
               <span class="mini-card asset-slot red-back" data-asset-bg="cardBackRed"></span>
             </span>
-            <strong>Play</strong>
-            <em>Room or bot duel</em>
+            <strong>Online</strong>
+            <em>Room Multiplayer</em>
           </button>
-          <button id="decksMenuCard" class="menu-card asset-slot fallback-frame card-hover tap-bounce" data-menu-action="decks" data-asset-bg="decksCard" type="button">
+          <button id="decksMenuCard" class="menu-card asset-slot fallback-frame card-hover tap-bounce" data-menu-action="solo" data-asset-bg="decksCard" type="button">
             <span class="menu-card-icon decks-card-icon">
               <span class="mini-card asset-slot red-back" data-asset-bg="cardBackRed"></span>
               <span class="mini-card asset-slot blue-back" data-asset-bg="cardBackBlue"></span>
             </span>
-            <strong>Decks</strong>
-            <em>Coming soon</em>
+            <strong>Solo</strong>
+            <em>Bot Duel</em>
           </button>
           <button id="rankedMenuCard" class="menu-card asset-slot fallback-frame card-hover tap-bounce" data-menu-action="ranked" data-asset-bg="rankedCard" type="button">
             <span class="menu-card-icon ranked-card-icon" aria-hidden="true"></span>
@@ -141,21 +142,12 @@
             </div>
           </div>
 
-          <p id="menuStatus" class="status-copy home-status">Tap Play to choose a duel.</p>
+          <p id="menuStatus" class="status-copy home-status">Tap Online or Solo Mode to choose a duel.</p>
           <div class="menu-actions">
             <button class="small-button" id="rulesBtn">Rules</button>
             <button class="small-button red" id="resetBtn">New Match</button>
           </div>
         </section>
-
-        <nav class="home-icon-menu" aria-label="Secondary menu">
-          <button class="home-icon-button icon-button asset-slot fallback-frame card-hover" data-menu-action="shop" data-asset-bg="bottomButtonFrame" type="button"><span class="bottom-icon shop-icon" aria-hidden="true"></span><span>Shop</span></button>
-          <button class="home-icon-button icon-button asset-slot fallback-frame card-hover" data-menu-action="collection" data-asset-bg="bottomButtonFrame" type="button"><span class="bottom-icon collection-icon" aria-hidden="true"></span><span>Collection</span></button>
-          <button class="home-icon-button icon-button asset-slot fallback-frame card-hover" data-menu-action="quests" data-asset-bg="bottomButtonFrame" type="button"><span class="bottom-icon quests-icon" aria-hidden="true"></span><span>Quests</span></button>
-          <button class="home-icon-button icon-button asset-slot fallback-frame card-hover" data-menu-action="settings" data-asset-bg="bottomButtonFrame" type="button"><span class="bottom-icon settings-icon" aria-hidden="true"></span><span>Settings</span></button>
-          <button class="home-icon-button icon-button asset-slot fallback-frame card-hover" data-menu-action="profile" data-asset-bg="bottomButtonFrame" type="button"><span class="bottom-icon profile-icon" aria-hidden="true"></span><span>Profile</span></button>
-          <button class="home-icon-button icon-button asset-slot fallback-frame card-hover" data-menu-action="exit" data-asset-bg="bottomButtonFrame" type="button"><span class="bottom-icon exit-icon" aria-hidden="true"></span><span>Exit</span></button>
-        </nav>
 
         <div id="menuToast" class="menu-toast" aria-live="polite"></div>
       </div>
@@ -217,6 +209,7 @@
               <button class="settings-item" id="settingsStatusBtn">Status</button>
               <button class="settings-item" id="settingsHistoryBtn">Match History</button>
               <button class="settings-item" id="settingsTutorialBtn">Tutorial</button>
+              <button class="settings-item settings-sound" id="settingsSoundBtn">Sound <span id="settingsSoundState">On</span></button>
               <button class="settings-item" id="settingsThemeBtn">Toggle Theme</button>
             </div>
           </div>
@@ -338,6 +331,6 @@
     </div>
   </main>
 
-  <script src="/client.js?v=22"></script>
+  <script src="/client.js?v=27"></script>
 </body>
 </html>

@@ -130,6 +130,12 @@ button:disabled {
   filter: grayscale(.2);
 }
 
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
 button:active:not(:disabled):not(.hand-card):not(.token-button) {
   transform: translateY(1px) scale(.992);
 }
@@ -723,11 +729,31 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 }
 
 .home-hero {
+  position: relative;
   min-height: clamp(170px, 25svh, 232px);
   display: grid;
   grid-template-columns: minmax(68px, .74fr) minmax(0, 1.42fr) minmax(68px, .74fr);
   align-items: end;
   gap: clamp(3px, 1.1vw, 7px);
+}
+
+.home-hero-art {
+  position: absolute;
+  inset: -8px -5px 0;
+  z-index: 2;
+  pointer-events: none;
+  --asset-fit: contain;
+  --asset-position: center bottom;
+}
+
+.home-hero-art.png-backed ~ .mascot-slot {
+  opacity: 0;
+}
+
+.home-hero > .title-stack,
+.home-hero > .mascot-slot {
+  position: relative;
+  z-index: 1;
 }
 
 .title-stack {
@@ -739,7 +765,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 }
 
 .title-backing {
-  width: min(100%, 258px);
+  width: min(100%, 238px);
   min-height: clamp(84px, 12svh, 104px);
   display: grid;
   place-items: center;
@@ -780,7 +806,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 .logo-banner h1 {
   margin: 0;
   color: var(--home-cream);
-  font-size: clamp(28px, 8.6vw, 41px);
+  font-size: clamp(27px, 7.7vw, 35px);
   line-height: .86;
   text-align: center;
   text-transform: uppercase;
@@ -1060,7 +1086,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 
 .menu-card {
   min-width: 0;
-  min-height: clamp(112px, 15.6svh, 142px);
+  min-height: clamp(126px, 17.2svh, 158px);
   display: grid;
   grid-template-rows: minmax(42px, 1fr) auto auto;
   justify-items: center;
@@ -1090,8 +1116,10 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 
 .menu-card strong {
   color: #211611;
-  font-size: clamp(20px, 5.5vw, 28px);
-  line-height: .95;
+  max-width: 100%;
+  font-size: clamp(17px, 4.8vw, 22px);
+  line-height: 1;
+  text-align: center;
   text-transform: uppercase;
   text-shadow: 0 1px 0 rgba(255, 246, 211, .55);
 }
@@ -1108,10 +1136,25 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 }
 
 .menu-card-icon {
-  width: clamp(42px, 12vw, 58px);
-  height: clamp(42px, 12vw, 58px);
+  width: clamp(40px, 11vw, 52px);
+  height: clamp(40px, 11vw, 52px);
   display: grid;
   place-items: center;
+  position: relative;
+}
+
+.decks-card-icon .mini-card {
+  position: absolute;
+  left: 3px;
+  top: 5px;
+  transform: rotate(-9deg);
+}
+
+.decks-card-icon .blue-back {
+  left: 17px;
+  top: 1px;
+  margin: 0;
+  transform: rotate(9deg);
 }
 
 .mini-card {
@@ -1501,10 +1544,23 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   display: none;
 }
 
+.game-shell.network-busy .board,
+.game-shell.network-busy .hand-card,
+.game-shell.network-busy .token-button,
+.game-shell.network-busy .token-toggle,
+.game-shell.network-busy .player-actions button {
+  pointer-events: none;
+}
+
+.game-shell.network-busy .hand-panel,
+.game-shell.network-busy .player-actions {
+  filter: saturate(.78) brightness(.88);
+}
+
 .game-shell.intro-blur {
-  filter: blur(4px) brightness(.72);
-  transform: scale(1.01);
-  transition: filter .28s ease, transform .28s ease;
+  filter: blur(4px) brightness(.68);
+  transform: scale(1.012);
+  transition: filter .42s ease, transform .42s ease;
 }
 
 .game-shell.inspecting-piece .board-frame {
@@ -1639,6 +1695,17 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   font-size: 10px;
 }
 
+.settings-sound {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settings-sound span {
+  color: var(--gold);
+}
+
 .room-strip {
   min-height: 28px;
   display: grid;
@@ -1680,6 +1747,23 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 
 .room-strip span:nth-child(3) {
   text-align: right;
+}
+
+#onlineStatus[data-state="live"] {
+  color: #9ed9af;
+}
+
+#onlineStatus[data-state="reconnecting"] {
+  color: #f1c86a;
+  animation: connectionPulse 1.1s ease-in-out infinite;
+}
+
+#onlineStatus[data-state="offline"] {
+  color: #d96d55;
+}
+
+@keyframes connectionPulse {
+  50% { opacity: .56; }
 }
 
 .duelist-bar {
@@ -2028,6 +2112,14 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   filter: brightness(1.08);
 }
 
+.tile.is-holding {
+  border-color: #fff0b6;
+  filter: brightness(1.12);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 240, 182, .86),
+    0 0 24px rgba(247, 217, 135, .38);
+}
+
 .tile.selectable {
   border-color: var(--gold);
   box-shadow:
@@ -2111,11 +2203,11 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 }
 
 .tile.last-placed::before {
-  animation: tile-glint .85s ease both;
+  animation: tile-glint 1.75s ease both;
 }
 
 .tile.placement-impact {
-  animation: placement-impact-flash .48s cubic-bezier(.18, .88, .22, 1) both;
+  animation: placement-impact-flash 1s cubic-bezier(.18, .88, .22, 1) both;
 }
 
 .card.cutscene-card-pending {
@@ -2125,7 +2217,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 }
 
 .card.cutscene-card-reveal {
-  animation: placed-card-reveal .36s cubic-bezier(.18, .88, .22, 1) both;
+  animation: placed-card-reveal .75s cubic-bezier(.18, .88, .22, 1) both;
 }
 
 .card.cutscene-placement-card {
@@ -2138,11 +2230,11 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
     drop-shadow(0 18px 18px rgba(0, 0, 0, .42))
     drop-shadow(0 0 14px rgba(247, 217, 135, .35));
   transition:
-    left .56s cubic-bezier(.16, .9, .2, 1),
-    top .56s cubic-bezier(.16, .9, .2, 1),
-    transform .56s cubic-bezier(.16, .9, .2, 1),
-    opacity .18s ease,
-    filter .18s ease;
+    left 1.18s cubic-bezier(.16, .9, .2, 1),
+    top 1.18s cubic-bezier(.16, .9, .2, 1),
+    transform 1.18s cubic-bezier(.16, .9, .2, 1),
+    opacity .36s ease,
+    filter .36s ease;
 }
 
 .card.cutscene-placement-card.in-flight {
@@ -2156,8 +2248,8 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   opacity: 0;
   transform: translate(-50%, -50%) rotate(0deg) scale(.7);
   transition:
-    transform .22s ease,
-    opacity .22s ease;
+    transform .46s ease,
+    opacity .46s ease;
 }
 
 .game-shell.board-cutscene-active .hand-card,
@@ -2176,27 +2268,27 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 }
 
 .tile.shooter-cutscene .card {
-  animation: shooter-cutscene-pop .56s cubic-bezier(.18, .88, .22, 1) both;
+  animation: shooter-cutscene-pop 1.18s cubic-bezier(.18, .88, .22, 1) both;
 }
 
 .tile.shot-impact {
-  animation: shot-impact-flash .72s ease both;
+  animation: shot-impact-flash 1.5s ease both;
 }
 
 .tile.witch-stun-vfx {
-  animation: witch-tile-pulse .9s ease both;
+  animation: witch-tile-pulse 1.9s ease both;
 }
 
 .tile.sweep-impact {
-  animation: sweep-impact-flash .9s cubic-bezier(.18, .88, .22, 1) both;
+  animation: sweep-impact-flash 1.9s cubic-bezier(.18, .88, .22, 1) both;
 }
 
 .tile.parry-cutscene {
-  animation: parry-cutscene-flash .82s ease both;
+  animation: parry-cutscene-flash 1.7s ease both;
 }
 
 .tile.stun-cleared-vfx {
-  animation: stun-clear-flash .78s ease both;
+  animation: stun-clear-flash 1.65s ease both;
 }
 
 .shot-vfx {
@@ -2211,7 +2303,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   filter:
     drop-shadow(0 0 8px rgba(247, 217, 135, .9))
     drop-shadow(0 0 16px rgba(117, 179, 255, .46));
-  animation: shot-vfx-flight .78s cubic-bezier(.18, .88, .22, 1) both;
+  animation: shot-vfx-flight 1.65s cubic-bezier(.18, .88, .22, 1) both;
 }
 
 .shot-vfx::after {
@@ -2231,7 +2323,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   z-index: 410;
   pointer-events: none;
   transform: translate(-50%, -50%) scale(1);
-  animation: removed-card-hold 1.04s ease both;
+  animation: removed-card-hold 2.15s ease both;
 }
 
 .card.cutscene-removed-card.hit {
@@ -2253,7 +2345,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   box-shadow:
     0 0 18px rgba(179, 134, 255, .58),
     inset 0 0 18px rgba(247, 217, 135, .18);
-  animation: stun-rune-bloom .9s cubic-bezier(.18, .88, .22, 1) both;
+  animation: stun-rune-bloom 1.9s cubic-bezier(.18, .88, .22, 1) both;
 }
 
 .card.cutscene-return-card {
@@ -2266,11 +2358,11 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
     drop-shadow(0 14px 18px rgba(0, 0, 0, .52))
     drop-shadow(0 0 12px rgba(247, 217, 135, .34));
   transition:
-    left .82s cubic-bezier(.2, .88, .2, 1),
-    top .82s cubic-bezier(.2, .88, .2, 1),
-    transform .82s cubic-bezier(.2, .88, .2, 1),
-    opacity .58s ease,
-    filter .58s ease;
+    left 1.7s cubic-bezier(.2, .88, .2, 1),
+    top 1.7s cubic-bezier(.2, .88, .2, 1),
+    transform 1.7s cubic-bezier(.2, .88, .2, 1),
+    opacity 1.2s ease,
+    filter 1.2s ease;
 }
 
 .card.cutscene-return-card.returning {
@@ -2304,10 +2396,10 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   font-size: 15px;
   font-weight: 900;
   transition:
-    left .72s cubic-bezier(.2, .88, .2, 1),
-    top .72s cubic-bezier(.2, .88, .2, 1),
-    transform .72s cubic-bezier(.2, .88, .2, 1),
-    opacity .52s ease;
+    left 1.5s cubic-bezier(.2, .88, .2, 1),
+    top 1.5s cubic-bezier(.2, .88, .2, 1),
+    transform 1.5s cubic-bezier(.2, .88, .2, 1),
+    opacity 1.05s ease;
 }
 
 .cutscene-token-vfx {
@@ -2983,6 +3075,16 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   pointer-events: none;
 }
 
+.section-label::before {
+  content: "";
+  position: absolute;
+  inset: -2px -1px;
+  z-index: -1;
+  border-bottom: 1px solid rgba(201, 154, 62, .28);
+  background: linear-gradient(90deg, rgba(2, 7, 14, .94), rgba(8, 15, 26, .82) 52%, rgba(22, 8, 13, .9));
+  box-shadow: 0 5px 12px rgba(0, 0, 0, .24);
+}
+
 .section-label span:first-child {
   color: var(--muted);
 }
@@ -3176,10 +3278,10 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 
 .hand-card.place-ghost {
   transition:
-    left .34s cubic-bezier(.18, .88, .22, 1),
-    top .34s cubic-bezier(.18, .88, .22, 1),
-    transform .34s cubic-bezier(.18, .88, .22, 1),
-    opacity .34s ease;
+    left .72s cubic-bezier(.18, .88, .22, 1),
+    top .72s cubic-bezier(.18, .88, .22, 1),
+    transform .72s cubic-bezier(.18, .88, .22, 1),
+    opacity .72s ease;
 }
 
 .hand-card::before {
@@ -3692,7 +3794,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
 }
 
 .token-button.place-ghost {
-  transition: left .28s cubic-bezier(.2, .85, .22, 1), top .28s cubic-bezier(.2, .85, .22, 1), transform .28s ease, opacity .18s ease;
+  transition: left .6s cubic-bezier(.2, .85, .22, 1), top .6s cubic-bezier(.2, .85, .22, 1), transform .6s ease, opacity .4s ease;
 }
 
 .token-button.token-enter {
@@ -4124,8 +4226,10 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   padding: 24px;
   opacity: 0;
   pointer-events: none;
-  background: rgba(0, 0, 0, .34);
-  transition: opacity .32s ease;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(247, 217, 135, .12), transparent 42%),
+    rgba(0, 0, 0, .4);
+  transition: opacity .46s ease;
 }
 
 .turn-intro-overlay.show {
@@ -4136,12 +4240,31 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   width: min(100%, 340px);
   padding: 22px 18px;
   text-align: center;
-  transform: translateY(12px) scale(.96);
-  transition: transform .34s cubic-bezier(.2, .95, .25, 1.12);
+  transform: translateY(18px) scale(.92);
+  opacity: .2;
+  transition:
+    transform .54s cubic-bezier(.16, .9, .2, 1),
+    opacity .42s ease,
+    box-shadow .42s ease;
 }
 
 .turn-intro-overlay.show .turn-intro-card {
   transform: translateY(0) scale(1);
+  opacity: 1;
+}
+
+.turn-intro-overlay[data-tone="your"] .turn-intro-card {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 245, 207, .08),
+    0 18px 40px rgba(0, 0, 0, .42),
+    0 0 34px rgba(247, 217, 135, .24);
+}
+
+.turn-intro-overlay[data-tone="opponent"] .turn-intro-card {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 245, 207, .06),
+    0 18px 40px rgba(0, 0, 0, .46),
+    0 0 28px rgba(163, 58, 46, .22);
 }
 
 .turn-intro-card span {
@@ -4162,6 +4285,11 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   line-height: 1;
   text-transform: uppercase;
   text-shadow: 0 3px 0 #4a2b0e, 0 0 18px rgba(247, 217, 135, .2);
+}
+
+.turn-intro-overlay[data-tone="opponent"] .turn-intro-card strong {
+  color: #e46b56;
+  text-shadow: 0 3px 0 #3b0f0b, 0 0 18px rgba(228, 107, 86, .18);
 }
 
 .rules-scroll {
@@ -4298,6 +4426,7 @@ button:active:not(:disabled):not(.hand-card):not(.token-button) {
   font-size: 14px;
   font-weight: 800;
   line-height: 1.34;
+  white-space: pre-line;
 }
 
 @media (prefers-reduced-motion: reduce) {

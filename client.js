@@ -75,6 +75,7 @@ const UI_ASSETS = {
   titleBacking: "",
   girlJester: "",
   boyJester: "",
+  heroMascots: "/assets/ui/home-jesters.png",
   playerAvatar: "",
   profileFrame: "",
   playCard: "",
@@ -90,10 +91,102 @@ const UI_ASSETS = {
   cornerOrnament: ""
 };
 
+class GameAudioEngine {
+  constructor() {
+    this.enabled = localStorage.getItem("jg-sound-enabled") !== "false";
+    this.context = null;
+    this.master = null;
+  }
+
+  unlock() {
+    if (!this.enabled) return;
+    if (!this.context) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+      this.context = new AudioContextClass();
+      this.master = this.context.createGain();
+      this.master.gain.value = 0.42;
+      this.master.connect(this.context.destination);
+    }
+    if (this.context.state === "suspended") this.context.resume().catch(() => {});
+  }
+
+  tone(frequency, duration = 0.1, delay = 0, options = {}) {
+    if (!this.enabled) return;
+    this.unlock();
+    if (!this.context || !this.master) return;
+    const start = this.context.currentTime + delay;
+    const oscillator = this.context.createOscillator();
+    const gain = this.context.createGain();
+    oscillator.type = options.type || "sine";
+    oscillator.frequency.setValueAtTime(frequency, start);
+    if (options.to) oscillator.frequency.exponentialRampToValueAtTime(Math.max(20, options.to), start + duration);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(options.gain || 0.07, start + Math.min(0.018, duration / 3));
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    oscillator.connect(gain);
+    gain.connect(this.master);
+    oscillator.start(start);
+    oscillator.stop(start + duration + 0.02);
+  }
+
+  play(cue) {
+    if (!this.enabled) return;
+    const cues = {
+      tap: () => this.tone(420, 0.045, 0, { gain: 0.035, type: "triangle", to: 360 }),
+      select: () => {
+        this.tone(330, 0.08, 0, { gain: 0.05, type: "triangle", to: 430 });
+        this.tone(660, 0.09, 0.045, { gain: 0.035, type: "sine", to: 720 });
+      },
+      deckOpen: () => [220, 294, 392].forEach((note, index) => this.tone(note, 0.11, index * 0.045, { gain: 0.04, type: "triangle", to: note * 1.08 })),
+      deckClose: () => [392, 294, 220].forEach((note, index) => this.tone(note, 0.1, index * 0.04, { gain: 0.032, type: "triangle", to: note * 0.9 })),
+      reveal: () => [262, 392, 523].forEach((note, index) => this.tone(note, 0.18, index * 0.065, { gain: 0.05, type: "sine", to: note * 1.04 })),
+      place: () => {
+        this.tone(132, 0.16, 0, { gain: 0.09, type: "triangle", to: 92 });
+        this.tone(528, 0.12, 0.08, { gain: 0.04, type: "sine", to: 610 });
+      },
+      token: () => [780, 1040].forEach((note, index) => this.tone(note, 0.09, index * 0.055, { gain: 0.035, type: "sine", to: note * 1.08 })),
+      shot: () => {
+        this.tone(980, 0.32, 0, { gain: 0.07, type: "sawtooth", to: 170 });
+        this.tone(110, 0.16, 0.24, { gain: 0.08, type: "triangle", to: 68 });
+      },
+      stun: () => [196, 185, 147].forEach((note, index) => this.tone(note, 0.28, index * 0.075, { gain: 0.05, type: "sine", to: note * 0.72 })),
+      sweep: () => {
+        this.tone(180, 0.42, 0, { gain: 0.06, type: "sawtooth", to: 760 });
+        this.tone(96, 0.18, 0.32, { gain: 0.075, type: "triangle", to: 68 });
+      },
+      turn: () => [294, 440, 587].forEach((note, index) => this.tone(note, 0.24, index * 0.095, { gain: 0.048, type: "triangle", to: note * 1.04 })),
+      join: () => [392, 494, 659].forEach((note, index) => this.tone(note, 0.16, index * 0.07, { gain: 0.045, type: "sine", to: note * 1.03 })),
+      win: () => [262, 330, 392, 523].forEach((note, index) => this.tone(note, 0.42, index * 0.12, { gain: 0.055, type: "triangle", to: note * 1.05 })),
+      error: () => [180, 140].forEach((note, index) => this.tone(note, 0.14, index * 0.09, { gain: 0.045, type: "square", to: note * 0.82 }))
+    };
+    cues[cue]?.();
+  }
+
+  toggle() {
+    this.enabled = !this.enabled;
+    localStorage.setItem("jg-sound-enabled", String(this.enabled));
+    if (this.enabled) {
+      this.unlock();
+      this.play("select");
+    }
+    return this.enabled;
+  }
+}
+
+const gameAudio = new GameAudioEngine();
+
 let socket = null;
 let autoJoinAttempted = false;
 let usingHttpFallback = false;
 let pollTimer = null;
+let pollingActive = false;
+let pollInFlight = false;
+let consecutiveNetworkFailures = 0;
+let lastServerContactAt = 0;
+let lastAcceptedRevision = 0;
+let menuRequestInFlight = false;
+let networkActionInFlight = false;
 let roomHeartbeatTimer = null;
 let reconnectTimer = null;
 let rejoinInFlight = false;
@@ -173,6 +266,8 @@ let previousTokenCounts = {};
 let previousBoardTopKeys = [];
 let previousBoardTokenKeys = [];
 let previousRoomPhase = "";
+let previousTurnSignature = "";
+let announcedWinner = null;
 let previousPlayerTwoConnected = false;
 let previousShowingTokens = false;
 let introTimer = null;
@@ -203,6 +298,8 @@ const TOKEN_LAYOUTS = [
   { x: 4, y: 3, openX: -70, openY: -34, z: 2 },
   { x: -1, y: 6, openX: -28, openY: -52, z: 1 }
 ];
+
+const BOARD_ANIMATION_SLOWDOWN = 2.05;
 
 function getClientId() {
   const existing = localStorage.getItem("jg-client-id");
@@ -266,6 +363,15 @@ function showScreen(name) {
 
 function setMenuStatus(text) {
   menuStatus.textContent = text;
+}
+
+function setMenuRequestBusy(busy, message = "") {
+  menuRequestInFlight = busy;
+  ["createRoomBtn", "joinRoomBtn"].forEach((id) => {
+    const button = document.getElementById(id);
+    if (button) button.disabled = busy;
+  });
+  if (message) setMenuStatus(message);
 }
 
 function showMenuTab(tab) {
@@ -341,7 +447,6 @@ function handleMenuAction(action, target = null) {
   console.log(`Jester's Grid menu action: ${action}`);
   bounceMenuTarget(target);
   const messages = {
-    decks: "Deck builder is coming soon.",
     ranked: "Ranked mode is coming soon.",
     shop: "Shop is coming soon.",
     collection: "Collection is coming soon.",
@@ -355,10 +460,17 @@ function handleMenuAction(action, target = null) {
     gems: "Gem shop is coming soon."
   };
 
-  if (action === "play") {
+  if (action === "play" || action === "online") {
     playDrawer?.classList.add("open");
     showMenuTab("room");
-    showMenuToast("Choose Room Multiplayer or Quickplay.");
+    showMenuToast("Online room options opened.");
+    return;
+  }
+
+  if (action === "solo" || action === "decks") {
+    playDrawer?.classList.add("open");
+    showMenuTab("quickplay");
+    showMenuToast("Solo Mode options opened.");
     return;
   }
 
@@ -377,8 +489,21 @@ function activeRoomCode() {
 
 function receiveServerSnapshot(nextSnapshot, renderNow = true) {
   if (!nextSnapshot || isOfflineQuickplay()) return false;
+  const nextCode = String(nextSnapshot.room?.code || "");
+  const currentCode = String(snapshot?.room?.code || "");
+  const nextRevision = Number(nextSnapshot.room?.revision || 0);
+  const currentRevision = currentCode === nextCode ? Number(snapshot?.room?.revision || lastAcceptedRevision || 0) : 0;
+  if (nextCode && nextCode === currentCode && nextRevision && currentRevision && nextRevision <= currentRevision) {
+    lastServerContactAt = Date.now();
+    consecutiveNetworkFailures = 0;
+    return false;
+  }
   const previousSnapshot = snapshot;
   snapshot = nextSnapshot;
+  if (nextCode !== currentCode) lastAcceptedRevision = 0;
+  lastAcceptedRevision = Math.max(lastAcceptedRevision, nextRevision);
+  lastServerContactAt = Date.now();
+  consecutiveNetworkFailures = 0;
   if (snapshot.room?.code && (snapshot.you?.seat === 0 || snapshot.you?.seat === 1)) {
     rememberRoomSession(snapshot.room.code, snapshot.you.seat);
     roomCodeInput.value = snapshot.room.code;
@@ -641,19 +766,32 @@ function startHttpFallback() {
 }
 
 function startPolling() {
-  if (pollTimer) return;
-  pollTimer = window.setInterval(pollState, 1000);
+  if (pollingActive) return;
+  pollingActive = true;
+  const tick = async () => {
+    pollTimer = null;
+    await pollState();
+    if (!pollingActive || !usingHttpFallback || isOfflineQuickplay() || !activeRoomCode()) {
+      pollingActive = false;
+      return;
+    }
+    const delay = document.hidden ? 2400 : Math.min(2400, 780 + consecutiveNetworkFailures * 360);
+    pollTimer = window.setTimeout(tick, delay);
+  };
+  pollTimer = window.setTimeout(tick, 80);
 }
 
 function stopPolling() {
-  if (!pollTimer) return;
-  window.clearInterval(pollTimer);
+  pollingActive = false;
+  if (pollTimer) window.clearTimeout(pollTimer);
   pollTimer = null;
 }
 
 async function pollState() {
   if (isOfflineQuickplay()) return;
   if (!usingHttpFallback || !activeRoomCode()) return;
+  if (pollInFlight) return;
+  pollInFlight = true;
   const seat = mySeat();
   const params = new URLSearchParams({ code: activeRoomCode(), clientId, seat: String(seat ?? "") });
   try {
@@ -665,7 +803,10 @@ async function pollState() {
       rejoinActiveRoom({ silent: true });
     }
   } catch {
+    consecutiveNetworkFailures += 1;
     setMenuStatus("Reconnecting...");
+  } finally {
+    pollInFlight = false;
   }
 }
 
@@ -687,18 +828,23 @@ async function sendHttpEvent(event, payload, callback) {
     ? { clientId, code: activeRoomCode(), seat: mySeat(), action: payload }
     : { ...payload, clientId };
 
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 12_000);
   try {
     const response = await fetch(route, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal: controller.signal
     });
     const result = await response.json();
     const hasSnapshot = receiveServerSnapshot(result.snapshot, false);
     callback?.(result);
     if (hasSnapshot) render();
   } catch {
-    callback?.({ ok: false, message: "Could not reach the server." });
+    callback?.({ ok: false, message: "The court is reconnecting. Please try again." });
+  } finally {
+    window.clearTimeout(timeout);
   }
 }
 
@@ -780,6 +926,56 @@ function getTokenInspectInfo(token) {
   };
 }
 
+function getTileInspectInfo(index) {
+  const game = currentGame();
+  const tile = game?.board?.[index];
+  if (!tile) return null;
+
+  const card = topCard(tile);
+  const tokenLines = tile.tokens.length
+    ? tile.tokens.map((token) => {
+      const meta = TOKEN_TYPES.find((item) => item.id === token.type);
+      const ownerId = Number(token.owner);
+      const ownerName = Number.isInteger(ownerId) ? (game.players?.[ownerId - 1]?.name || `Player ${ownerId}`) : "Unknown owner";
+      const tokenName = meta?.label || "Token";
+      const detail = TOKEN_DETAILS[token.type] || "A token is attached to this tile.";
+      return `${tokenName} (${ownerName}): ${detail}`;
+    }).join("\n")
+    : "No tokens on this tile.";
+
+  if (!card) {
+    return {
+      title: `Tile ${index + 1}`,
+      meta: "Empty Tile",
+      body: `No card is occupying this tile.\n\nTokens:\n${tokenLines}`
+    };
+  }
+
+  const ownerId = Number(card.owner);
+  const ownerName = Number.isInteger(ownerId) ? (game.players?.[ownerId - 1]?.name || `Player ${ownerId}`) : "Unknown owner";
+  const value = effectiveValue(card, tile);
+  const statuses = [];
+  if (card.value === 14 || tile.locked) statuses.push("Locked by Jester");
+  if (tile.stunTurns > 0 || card.stunned) statuses.push(`Stunned${tile.stunTurns > 0 ? ` for ${tile.stunTurns} turn${tile.stunTurns === 1 ? "" : "s"}` : ""}`);
+  if (card.protected) statuses.push("Protected by Parry");
+  if (card.pierce) statuses.push("Armor Pierce armed");
+
+  return {
+    title: CARD_NAMES[card.value] || "Card",
+    meta: `Tile ${index + 1} - Card ${card.value}`,
+    body: [
+      `Owner: ${ownerName}`,
+      `Power: ${value}${value !== card.value ? ` (base ${card.value})` : ""}`,
+      `Stack: ${tile.stack.length} card${tile.stack.length === 1 ? "" : "s"}`,
+      `Status: ${statuses.length ? statuses.join(", ") : "Normal"}`,
+      "",
+      CARD_DETAILS[card.value] || getCardHint(card.value),
+      "",
+      `Tokens:\n${tokenLines}`
+    ].join("\n")
+  };
+}
+
 function resetRenderMemory() {
   previousHandValues = [];
   previousTokenCounts = {};
@@ -833,6 +1029,54 @@ function bindHoldInfo(element, getInfo, delay = 560) {
   element.addEventListener("pointerleave", clearHold);
 }
 
+function bindTileInspect(tileEl, index) {
+  let holdTimer = null;
+  let startX = 0;
+  let startY = 0;
+
+  const clearHold = () => {
+    window.clearTimeout(holdTimer);
+    holdTimer = null;
+    tileEl.classList.remove("is-holding");
+  };
+
+  tileEl.addEventListener("pointerdown", (event) => {
+    if (event.button && event.button !== 0) return;
+    if (boardCutsceneActive || inspectOverlay.classList.contains("show")) return;
+    startX = event.clientX;
+    startY = event.clientY;
+    tileEl.classList.add("is-holding");
+    holdTimer = window.setTimeout(() => {
+      tileEl.dataset.suppressClick = "true";
+      tileEl.classList.remove("is-holding");
+      setInspectOrigin(tileEl, Math.min(window.innerWidth * 0.86, 350));
+      openInspect(getTileInspectInfo(index));
+    }, 520);
+    try {
+      tileEl.setPointerCapture(event.pointerId);
+    } catch {
+      // Some synthetic pointer events cannot be captured.
+    }
+  });
+
+  tileEl.addEventListener("pointermove", (event) => {
+    if (!holdTimer) return;
+    if (Math.abs(event.clientX - startX) > 12 || Math.abs(event.clientY - startY) > 12) clearHold();
+  });
+
+  tileEl.addEventListener("pointerup", (event) => {
+    clearHold();
+    try {
+      tileEl.releasePointerCapture(event.pointerId);
+    } catch {
+      // Ignore release failures from browser-generated cleanup.
+    }
+  });
+  tileEl.addEventListener("pointercancel", clearHold);
+  tileEl.addEventListener("pointerleave", clearHold);
+  tileEl.addEventListener("contextmenu", (event) => event.preventDefault());
+}
+
 function consumeHeldClick(element) {
   if (Date.now() < suppressPieceClickUntil) return true;
   if (element.dataset.suppressClick !== "true") return false;
@@ -846,6 +1090,7 @@ function tapFeedback(element) {
   element.classList.add("tap-feedback");
   window.setTimeout(() => element.classList.remove("tap-feedback"), 280);
   if (navigator.vibrate) navigator.vibrate(9);
+  gameAudio.play("tap");
 }
 
 function setInspectOrigin(element, finalWidth) {
@@ -870,6 +1115,7 @@ function inspectCardFromElement(card, index, value) {
   heldTokenId = null;
   deckExpanded = false;
   localMessage = `${CARD_NAMES[value]} revealed.`;
+  gameAudio.play("reveal");
   render();
 }
 
@@ -909,6 +1155,7 @@ function inspectTokenFromElement(button, token) {
   heldTokenId = null;
   deckExpanded = false;
   localMessage = `${token.label} revealed.`;
+  gameAudio.play("reveal");
   render();
 }
 
@@ -970,6 +1217,7 @@ function openDeckAnimated(message = "Deck opened. Tap a card to select it, hold 
   deckExpanded = true;
   clearHandFocus();
   syncDeckExpansionClasses();
+  gameAudio.play("deckOpen");
   setLocalMessageInline(message);
   settleDeckMotion();
   return true;
@@ -978,6 +1226,7 @@ function openDeckAnimated(message = "Deck opened. Tap a card to select it, hold 
 function tuckDeckAnimated() {
   deckExpanded = false;
   selectedCardIndex = null;
+  gameAudio.play("deckClose");
   heldCardIndex = null;
   syncDeckExpansionClasses();
   handEl.querySelectorAll(".selected, .held-card").forEach((card) => card.classList.remove("selected", "held-card"));
@@ -1013,8 +1262,16 @@ function isInsideTokenArea(x, y) {
   return x >= left - 24 && x <= right + 24 && y >= top - 144 && y <= bottom + 24;
 }
 
+function boardDelay(ms) {
+  return Math.round(ms * BOARD_ANIMATION_SLOWDOWN);
+}
+
 function waitForCutscene(ms) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
+  return new Promise((resolve) => window.setTimeout(resolve, boardDelay(ms)));
+}
+
+function boardTimeout(callback, ms) {
+  return window.setTimeout(callback, boardDelay(ms));
 }
 
 function setBoardCutsceneActive(active, message = "") {
@@ -1073,6 +1330,7 @@ async function playPlacementVfx(event) {
   const player = currentGame()?.players?.[event.card.owner - 1];
   const playerName = player?.name || `Player ${event.card.owner}`;
   setBoardCutsceneMessage(`${playerName} places ${event.card.value} - ${CARD_NAMES[event.card.value]}.`);
+  gameAudio.play("place");
 
   if (event.card.owner - 1 === mySeat()) {
     pulseTile(event.tile, "placement-impact", 420);
@@ -1102,7 +1360,7 @@ async function playPlacementVfx(event) {
   finalCard?.classList.remove("cutscene-card-pending");
   finalCard?.classList.add("cutscene-card-reveal");
   ghost.classList.add("landed");
-  window.setTimeout(() => {
+  boardTimeout(() => {
     ghost.remove();
     finalCard?.classList.remove("cutscene-card-reveal");
   }, 260);
@@ -1115,7 +1373,7 @@ function pulseTile(index, className, duration = 520) {
   center.tile.classList.remove(className);
   void center.tile.offsetWidth;
   center.tile.classList.add(className);
-  window.setTimeout(() => center.tile.classList.remove(className), duration);
+  boardTimeout(() => center.tile.classList.remove(className), duration);
 }
 
 function pieceReturnTarget(owner, kind) {
@@ -1145,8 +1403,8 @@ function spawnRemovedCardEcho(index, card) {
   echo.style.height = `${Math.max(52, center.rect.height * 0.84)}px`;
   echo.innerHTML = boardCardHtml(card);
   document.body.appendChild(echo);
-  window.setTimeout(() => echo.classList.add("hit"), 420);
-  window.setTimeout(() => echo.remove(), 1120);
+  boardTimeout(() => echo.classList.add("hit"), 420);
+  boardTimeout(() => echo.remove(), 1120);
   return echo;
 }
 
@@ -1162,12 +1420,12 @@ function spawnReturningCardEcho(index, card, order = 0) {
   echo.style.height = `${Math.max(50, center.rect.height * 0.78)}px`;
   echo.innerHTML = boardCardHtml(card);
   document.body.appendChild(echo);
-  window.setTimeout(() => {
+  boardTimeout(() => {
     echo.classList.add("returning");
     echo.style.left = `${target.x}px`;
     echo.style.top = `${target.y}px`;
   }, 110 + order * 90);
-  window.setTimeout(() => echo.remove(), 1120 + order * 90);
+  boardTimeout(() => echo.remove(), 1120 + order * 90);
 }
 
 function spawnReturningTokenEcho(index, token, order = 0) {
@@ -1181,12 +1439,12 @@ function spawnReturningTokenEcho(index, token, order = 0) {
   echo.style.left = `${center.x}px`;
   echo.style.top = `${center.y}px`;
   document.body.appendChild(echo);
-  window.setTimeout(() => {
+  boardTimeout(() => {
     echo.classList.add("returning");
     echo.style.left = `${target.x}px`;
     echo.style.top = `${target.y}px`;
   }, 150 + order * 80);
-  window.setTimeout(() => echo.remove(), 1060 + order * 80);
+  boardTimeout(() => echo.remove(), 1060 + order * 80);
 }
 
 async function playReturnsVfx(tileIndex, cards = [], tokens = []) {
@@ -1213,7 +1471,7 @@ function fireShotVfx(fromIndex, toIndex) {
   shot.style.transform = `rotate(${angle}deg)`;
   document.body.appendChild(shot);
   pulseTile(toIndex, "shot-impact", 760);
-  window.setTimeout(() => shot.remove(), 840);
+  boardTimeout(() => shot.remove(), 840);
 }
 
 function stunTileVfx(index) {
@@ -1225,7 +1483,7 @@ function stunTileVfx(index) {
   rune.style.left = `${center.x}px`;
   rune.style.top = `${center.y}px`;
   document.body.appendChild(rune);
-  window.setTimeout(() => rune.remove(), 940);
+  boardTimeout(() => rune.remove(), 940);
 }
 
 function stunClearVfx(index) {
@@ -1250,6 +1508,7 @@ async function playTokenAddVfx(event) {
   token.style.top = `${start.y}px`;
   document.body.appendChild(token);
   setBoardCutsceneMessage(`${meta?.label || "Token"} moves onto the board.`);
+  gameAudio.play("token");
   await waitForCutscene(60);
   token.classList.add("in-flight");
   token.style.left = `${target.x}px`;
@@ -1257,7 +1516,7 @@ async function playTokenAddVfx(event) {
   await waitForCutscene(520);
   pulseTile(event.tile, "placement-impact", 560);
   token.classList.add("landed");
-  window.setTimeout(() => token.remove(), 320);
+  boardTimeout(() => token.remove(), 320);
   await waitForCutscene(260);
 }
 
@@ -1267,6 +1526,7 @@ async function playSweepVfx(event) {
   const player = currentGame()?.players?.[event.card.owner - 1];
   const playerName = player?.name || `Player ${event.card.owner}`;
   setBoardCutsceneMessage(`${playerName} sweeps ${CARD_NAMES[event.card.value]} across the tile.`);
+  gameAudio.play("sweep");
 
   const start = cardTravelStart(event.card.owner);
   const ghost = document.createElement("div");
@@ -1287,7 +1547,7 @@ async function playSweepVfx(event) {
   await waitForCutscene(700);
   pulseTile(event.tile, "sweep-impact", 860);
   ghost.classList.add("landed");
-  window.setTimeout(() => ghost.remove(), 280);
+  boardTimeout(() => ghost.remove(), 280);
   await waitForCutscene(260);
   setBoardCutsceneMessage("Swept cards and tokens return to their owners.");
   await playReturnsVfx(event.tile, event.returnedCards || [], event.returnedTokens || []);
@@ -1295,6 +1555,7 @@ async function playSweepVfx(event) {
 
 async function playShotVfx(event) {
   setBoardCutsceneMessage(event.parried ? "Parry catches the shot." : "A shot cuts across the grid.");
+  gameAudio.play("shot");
   pulseTile(event.from, "shooter-cutscene", 720);
   await waitForCutscene(280);
   fireShotVfx(event.from, event.to);
@@ -1499,6 +1760,7 @@ async function playBoardCutscenes(events) {
       }
       if (event.type === "witch-stun") {
         setBoardCutsceneMessage("Witchcraft binds a tile.");
+        gameAudio.play("stun");
         stunTileVfx(event.tile);
         await waitForCutscene(760);
       }
@@ -1520,6 +1782,21 @@ function flushBoardCutscenes() {
   if (!events.length) return;
   boardCutsceneQueue = boardCutsceneQueue
     .then(() => playBoardCutscenes(events))
+    .catch(() => {});
+}
+
+function turnSignature() {
+  const game = currentGame();
+  if (!game || game.gameOver) return "";
+  return `${snapshot?.room?.code || "local"}:${game.current}`;
+}
+
+function showTurnIntroAfterBoardSettles(kind, signature) {
+  boardCutsceneQueue = boardCutsceneQueue
+    .then(() => {
+      if (signature && turnSignature() !== signature) return;
+      showTurnIntro(kind);
+    })
     .catch(() => {});
 }
 
@@ -1621,7 +1898,7 @@ function animateCardToTile(handIndex, tileIndex) {
     ghost.style.transform = "translate(-50%, -50%) rotate(0deg) scale(.58)";
     ghost.style.opacity = "0";
   });
-  window.setTimeout(() => ghost.remove(), 360);
+  boardTimeout(() => ghost.remove(), 360);
 }
 
 function animateDraggedCardToTile(ghost, tileIndex) {
@@ -1640,7 +1917,7 @@ function animateDraggedCardToTile(ghost, tileIndex) {
     ghost.style.transform = "translate(-50%, -50%) rotate(0deg) scale(.58)";
     ghost.style.opacity = "0";
   });
-  window.setTimeout(() => ghost.remove(), 380);
+  boardTimeout(() => ghost.remove(), 380);
 }
 
 function clearCardDrag() {
@@ -1855,7 +2132,7 @@ function animateTokenToTile(tokenId, tileIndex) {
     ghost.style.transform = "translate(-50%, -50%) scale(.48)";
     ghost.style.opacity = ".35";
   });
-  window.setTimeout(() => ghost.remove(), 300);
+  boardTimeout(() => ghost.remove(), 300);
 }
 
 function startTokenDrag(candidate, event) {
@@ -2936,6 +3213,7 @@ function render() {
     renderRoomCode = snapshot.room.code;
     resetRenderMemory();
     previousRoomPhase = "";
+    previousTurnSignature = "";
     previousPlayerTwoConnected = false;
   }
 
@@ -2954,6 +3232,7 @@ function render() {
     selectedCardIndex = null;
     remoteDragPreview = null;
     lastSentCardDragTile = null;
+    previousTurnSignature = "";
     clearCardDrag();
     clearTokenDrag();
   }
@@ -2966,6 +3245,7 @@ function render() {
   if (!playing) {
     gameShell.classList.remove("inspecting-piece", "dragging-card", "dragging-token");
     previousRoomPhase = phase;
+    previousTurnSignature = "";
     renderWin();
     return;
   }
@@ -2977,9 +3257,15 @@ function render() {
   renderTokens();
   renderTokenView();
   renderWin();
-  if (phaseChanged) showTurnIntro();
-  previousRoomPhase = phase;
+  const nextTurnSignature = turnSignature();
   flushBoardCutscenes();
+  if (phaseChanged) {
+    showTurnIntroAfterBoardSettles("match", nextTurnSignature);
+  } else if (nextTurnSignature && previousTurnSignature && nextTurnSignature !== previousTurnSignature) {
+    showTurnIntroAfterBoardSettles("turn", nextTurnSignature);
+  }
+  previousTurnSignature = nextTurnSignature;
+  previousRoomPhase = phase;
 }
 
 function renderWaitingRoom() {
@@ -2991,6 +3277,7 @@ function renderWaitingRoom() {
   const seat = mySeat();
   const myPlayerState = seat === 0 || seat === 1 ? players[seat] : null;
   const playerTwoJustJoined = playerTwo.connected && !previousPlayerTwoConnected;
+  if (playerTwoJustJoined) gameAudio.play("join");
 
   waitingRoomCode.textContent = snapshot.room.code;
   document.getElementById("waitingNameOne").textContent = playerOne.name || "Player 1";
@@ -3036,7 +3323,19 @@ function renderStatus() {
 
   document.getElementById("roomCodeDisplay").textContent = isOfflineQuickplay() ? "Offline Bot" : (snapshot.room.mode === "quickplay" ? "Quickplay" : `Room ${snapshot.room.code}`);
   document.getElementById("seatLabel").textContent = boardCutsceneActive ? "Resolving" : (isOfflineQuickplay() ? (isMyTurn() ? "Your Turn" : "Bot Turn") : (seat === null ? "Spectator" : `Player ${seat + 1}`));
-  document.getElementById("onlineStatus").textContent = isOfflineQuickplay() ? "Local" : (socketOpen() || usingHttpFallback ? "Online" : "Offline");
+  const onlineStatus = document.getElementById("onlineStatus");
+  const contactIsStale = lastServerContactAt && Date.now() - lastServerContactAt > 16_000;
+  const connectionState = isOfflineQuickplay()
+    ? { label: "Local", state: "local" }
+    : consecutiveNetworkFailures > 1 || contactIsStale
+      ? { label: "Reconnecting", state: "reconnecting" }
+      : socketOpen()
+        ? { label: "Live", state: "live" }
+        : usingHttpFallback
+          ? { label: "Synced", state: "live" }
+          : { label: "Offline", state: "offline" };
+  onlineStatus.textContent = connectionState.label;
+  onlineStatus.dataset.state = connectionState.state;
   document.getElementById("opponentName").textContent = top.name || `Player ${topIndex + 1}`;
   document.getElementById("opponentTitle").textContent = top.connected ? (top.rank || `Player ${topIndex + 1}`) : "Disconnected";
   document.getElementById("opponentInfo").textContent = `C ${top.handCount} - T ${top.tokenTotal}`;
@@ -3119,7 +3418,14 @@ function renderBoard() {
       tileEl.appendChild(preview);
     }
 
-    tileEl.addEventListener("click", () => onTileClick(index));
+    bindTileInspect(tileEl, index);
+    tileEl.addEventListener("click", (event) => {
+      if (consumeHeldClick(tileEl)) {
+        event.stopPropagation();
+        return;
+      }
+      onTileClick(index);
+    });
     boardEl.appendChild(tileEl);
   });
   previousBoardTopKeys = nextTopKeys;
@@ -3315,17 +3621,37 @@ function bindHorizontalWheel(element) {
   }, { passive: false });
 }
 
-function showTurnIntro() {
+function showTurnIntro(kind = "match") {
   const game = currentGame();
+  if (!game || !turnIntroOverlay || !turnIntroText || !turnIntroKicker) return;
   const seat = mySeat();
   let text = "The duel begins.";
   let kicker = "Match Begins";
-  if (seat === game.current) {
+  let tone = "neutral";
+
+  if (kind === "turn") {
+    const player = game.players?.[game.current];
+    const currentName = player?.name || `Player ${game.current + 1}`;
+    if (seat === game.current) {
+      text = "Your turn.";
+      kicker = "Your Turn";
+      tone = "your";
+    } else if (seat === 0 || seat === 1) {
+      text = `${currentName}'s turn.`;
+      kicker = "Opponent Turn";
+      tone = "opponent";
+    } else {
+      text = `${currentName}'s turn.`;
+      kicker = "Turn Change";
+    }
+  } else if (seat === game.current) {
     text = "You go first.";
     kicker = "First Move";
+    tone = "your";
   } else if (seat === 0 || seat === 1) {
     text = "You go second.";
     kicker = "Second Move";
+    tone = "opponent";
   } else {
     text = `Player ${game.current + 1} goes first.`;
     kicker = "Spectating";
@@ -3334,6 +3660,8 @@ function showTurnIntro() {
   window.clearTimeout(introTimer);
   turnIntroKicker.textContent = kicker;
   turnIntroText.textContent = text;
+  turnIntroOverlay.dataset.tone = tone;
+  gameAudio.play("turn");
   gameShell.classList.add("intro-blur");
   turnIntroOverlay.classList.add("show");
   turnIntroOverlay.setAttribute("aria-hidden", "false");
@@ -3341,7 +3669,7 @@ function showTurnIntro() {
     turnIntroOverlay.classList.remove("show");
     turnIntroOverlay.setAttribute("aria-hidden", "true");
     gameShell.classList.remove("intro-blur");
-  }, 2300);
+  }, kind === "turn" ? 2100 : 2400);
 }
 
 function renderWin() {
@@ -3351,8 +3679,15 @@ function renderWin() {
     winTitle.textContent = `${player.name || `Player ${game.winner}`} Wins!`;
     winText.textContent = "Four in a row.";
     winModal.classList.add("show");
+    const winnerKey = `${snapshot?.room?.code || "local"}:${game.winner}`;
+    if (announcedWinner !== winnerKey) {
+      announcedWinner = winnerKey;
+      gameAudio.play("win");
+      if (navigator.vibrate) navigator.vibrate([35, 45, 75]);
+    }
   } else {
     winModal.classList.remove("show");
+    announcedWinner = null;
   }
 }
 
@@ -3414,16 +3749,19 @@ function onTileClick(index) {
     return;
   }
   if (deckExpanded || inspectedCardIndex !== null) {
-    inspectedCardIndex = null;
-    heldCardIndex = null;
-    selectedCardIndex = null;
-    tuckDeckAnimated();
+    setLocalMessage("Pick a card, or tap outside the board to tuck the deck.");
     return;
   }
   sendAction({ type: "removeToken", tileIndex: index }, false);
 }
 
+function setNetworkActionBusy(busy) {
+  networkActionInFlight = busy;
+  gameShell.classList.toggle("network-busy", busy);
+}
+
 function sendAction(action, clearSelection = true, recoveryAttempt = 0) {
+  if (!action.actionId) action = { ...action, actionId: crypto.randomUUID() };
   if (boardCutsceneActive && action.type !== "restart") {
     setLocalMessageInline("Let the play resolve first.");
     return;
@@ -3456,6 +3794,14 @@ function sendAction(action, clearSelection = true, recoveryAttempt = 0) {
     return;
   }
 
+  if (recoveryAttempt === 0) {
+    if (networkActionInFlight) {
+      setLocalMessageInline("Finishing the current play...");
+      return;
+    }
+    setNetworkActionBusy(true);
+  }
+
   sendEvent("gameAction", action, (result) => {
     if (!result?.ok) {
       if (recoveryAttempt < 2 && shouldRecoverRoomError(result?.message)) {
@@ -3468,9 +3814,12 @@ function sendAction(action, clearSelection = true, recoveryAttempt = 0) {
         });
         return;
       }
+      setNetworkActionBusy(false);
+      gameAudio.play("error");
       setLocalMessage(result?.message || "That move is not available.");
       return;
     }
+    setNetworkActionBusy(false);
     localMessage = "";
     if (clearSelection) {
       selectedCardIndex = null;
@@ -3485,6 +3834,7 @@ function sendAction(action, clearSelection = true, recoveryAttempt = 0) {
         showingTokens = false;
       }
     }
+    render();
   });
 }
 
@@ -3495,6 +3845,7 @@ function refreshActiveConnection() {
 }
 
 function createRoom() {
+  if (menuRequestInFlight) return;
   const name = playerNameInput.value.trim() || "Jester";
   localStorage.setItem("jg-name", name);
   primeRoomNotificationPermission();
@@ -3502,8 +3853,11 @@ function createRoom() {
     window.clearTimeout(botTurnTimer);
     snapshot = null;
   }
+  setMenuRequestBusy(true, "Opening a private court...");
   sendEvent("createRoom", { name }, (result) => {
+    setMenuRequestBusy(false);
     if (!result?.ok) {
+      gameAudio.play("error");
       setMenuStatus(result?.message || "Could not create room.");
       return;
     }
@@ -3541,6 +3895,7 @@ function createBotRoom() {
   };
   renderRoomCode = "";
   previousRoomPhase = "";
+  previousTurnSignature = "";
   previousPlayerTwoConnected = true;
   previousShowingTokens = false;
   localMessage = "";
@@ -3552,9 +3907,11 @@ function createBotRoom() {
 }
 
 function joinRoom() {
+  if (menuRequestInFlight) return;
   const name = playerNameInput.value.trim() || "Jester";
   const code = roomCodeInput.value.trim().toUpperCase();
   if (!code) {
+    gameAudio.play("error");
     setMenuStatus("Enter a room code.");
     return;
   }
@@ -3563,8 +3920,11 @@ function joinRoom() {
     window.clearTimeout(botTurnTimer);
     snapshot = null;
   }
+  setMenuRequestBusy(true, "Finding the room...");
   sendEvent("joinRoom", { code, name }, (result) => {
+    setMenuRequestBusy(false);
     if (!result?.ok) {
+      gameAudio.play("error");
       setMenuStatus(result?.message || "Could not join room.");
       return;
     }
@@ -3588,6 +3948,7 @@ function leaveRoom() {
   snapshot = null;
   renderRoomCode = "";
   previousRoomPhase = "";
+  previousTurnSignature = "";
   localMessage = "";
   roomCodeInput.value = "";
   autoJoinAttempted = true;
@@ -3706,6 +4067,8 @@ window.handleMenuAction = handleMenuAction;
 applyHomeUiAssets();
 connectRealtime();
 
+document.addEventListener("pointerdown", () => gameAudio.unlock(), { once: true, capture: true });
+
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) refreshActiveConnection();
 });
@@ -3713,6 +4076,7 @@ window.addEventListener("focus", refreshActiveConnection);
 window.addEventListener("online", refreshActiveConnection);
 document.querySelectorAll("[data-menu-action]").forEach((button) => {
   button.addEventListener("click", (event) => {
+    gameAudio.play("tap");
     const action = event.currentTarget.dataset.menuAction;
     if (action) handleMenuAction(action, event.currentTarget);
   });
@@ -3743,13 +4107,14 @@ window.addEventListener("pointercancel", (event) => endTokenDragFromPointer(even
 handEl.addEventListener("click", (event) => {
   if (event.target !== handEl) return;
   if (deckExpanded || showingTokens) return;
+  event.stopPropagation();
   openDeckAnimated();
 });
 window.addEventListener("click", (event) => {
   const target = event.target;
   if (!(target instanceof Element)) return;
   if (Date.now() < suppressPieceClickUntil) return;
-  if (!deckExpanded && !showingTokens && inspectedCardIndex === null && inspectedTokenId === null && heldCardIndex === null && heldTokenId === null && selectedToken === null) return;
+  if (!deckExpanded && !showingTokens && inspectedCardIndex === null && inspectedTokenId === null && heldCardIndex === null && heldTokenId === null && selectedCardIndex === null && selectedToken === null) return;
   if (target.closest(".settings-menu, .settings-button, .modal, .inspect-overlay, .waiting-room")) return;
   if (inspectedCardIndex !== null) {
     closeInspectedCardAnimated();
@@ -3761,8 +4126,8 @@ window.addEventListener("click", (event) => {
     render();
     return;
   }
-  if (target.closest(".hand-stage")) return;
-  if (target.closest(".tile") && (selectedCardIndex !== null || selectedToken !== null)) return;
+  if (target.closest(".hand-card, .token-button, .token-toggle")) return;
+  if (target.closest(".board-frame")) return;
   if (deckExpanded) {
     tuckDeckAnimated();
     return;
@@ -3787,7 +4152,7 @@ tokenPanelBtn.addEventListener("click", (event) => {
 });
 inspectClose.addEventListener("click", closeInspect);
 inspectOverlay.addEventListener("click", (event) => {
-  if (event.target === inspectOverlay) closeInspect();
+  if (event.target instanceof Element) closeInspect();
 });
 window.addEventListener("keydown", (event) => {
   if (event.key === "Escape") closeInspect();
@@ -3796,6 +4161,17 @@ document.getElementById("themeGear").addEventListener("click", () => settingsMen
 document.getElementById("settingsThemeBtn").addEventListener("click", () => {
   applyTheme(document.body.getAttribute("data-theme") === "light" ? "dark" : "light");
   settingsMenu.classList.remove("open");
+});
+const settingsSoundState = document.getElementById("settingsSoundState");
+const updateSoundSettingLabel = () => {
+  if (settingsSoundState) settingsSoundState.textContent = gameAudio.enabled ? "On" : "Off";
+};
+updateSoundSettingLabel();
+document.getElementById("settingsSoundBtn").addEventListener("click", () => {
+  gameAudio.toggle();
+  updateSoundSettingLabel();
+  settingsMenu.classList.remove("open");
+  setLocalMessage(`Sound ${gameAudio.enabled ? "on" : "off"}.`);
 });
 document.getElementById("copyInviteBtn").addEventListener("click", copyInvite);
 document.getElementById("settingsStatusBtn").addEventListener("click", () => {

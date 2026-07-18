@@ -44,7 +44,15 @@ const VAPID_CONTACT = process.env.VAPID_CONTACT || "mailto:notifications@jesters
 const PUSH_READY = !!(webpush && VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY);
 const REDIS_REST_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || "";
 const REDIS_REST_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || "";
-const DURABLE_ROOM_STORE = !!(REDIS_REST_URL && REDIS_REST_TOKEN);
+const SUPABASE_URL = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const SUPABASE_ROOM_TABLE = process.env.SUPABASE_ROOM_TABLE || "jesters_grid_rooms";
+const SUPABASE_ROOM_STORE = !!(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
+const REDIS_ROOM_STORE = !!(REDIS_REST_URL && REDIS_REST_TOKEN);
+const DURABLE_ROOM_STORE = SUPABASE_ROOM_STORE || REDIS_ROOM_STORE;
+const ROOM_TTL_MS = 1000 * 60 * 60 * 6;
+const PLAYER_PRESENCE_TTL_MS = 22_000;
+const ROOM_MUTATION_RETRIES = 6;
 if (PUSH_READY) {
   webpush.setVapidDetails(VAPID_CONTACT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 }
@@ -117,7 +125,8 @@ function handleHttpRequest(req, res) {
       ok: true,
       rooms: rooms.size,
       clients: clients.size,
-      roomStore: DURABLE_ROOM_STORE ? "durable" : "memory",
+      roomStore: SUPABASE_ROOM_STORE ? "supabase" : REDIS_ROOM_STORE ? "redis" : "memory",
+      durableRooms: DURABLE_ROOM_STORE,
       push: PUSH_READY
     });
     return;
@@ -127,8 +136,8 @@ function handleHttpRequest(req, res) {
     return;
   }
 
-  if (url.pathname.startsWith("/assets/skins/")) {
-    serveSkinAsset(res, url.pathname);
+  if (url.pathname.startsWith("/assets/")) {
+    serveAsset(res, url.pathname);
     return;
   }
 
@@ -145,8 +154,8 @@ function handleHttpRequest(req, res) {
   serveFile(res, path.join(__dirname, match[0]), match[1]);
 }
 
-function serveSkinAsset(res, pathname) {
-  const relative = pathname.replace(/^\/assets\/skins\//, "");
+function serveAsset(res, pathname) {
+  const relative = pathname.replace(/^\/assets\//, "");
   const normalized = path.normalize(relative);
   if (normalized.startsWith("..") || path.isAbsolute(normalized)) {
     sendJsonResponse(res, fail("Asset not found."), 404);
@@ -166,7 +175,7 @@ function serveSkinAsset(res, pathname) {
     sendJsonResponse(res, fail("Asset not found."), 404);
     return;
   }
-  serveFile(res, path.join(__dirname, "assets", "skins", normalized), contentType);
+  serveFile(res, path.join(__dirname, "assets", normalized), contentType);
 }
 
 async function handleApiRequest(req, res, url) {
@@ -178,9 +187,6 @@ async function handleApiRequest(req, res, url) {
         return;
       }
       const seat = resolveSeat(room, url.searchParams.get("clientId"), url.searchParams.get("seat"));
-      touchSeatConnection(room, seat);
-      advanceBotIfNeeded(room);
-      await saveRoom(room);
       sendJsonResponse(res, { ok: true, snapshot: snapshotFor(room, seat) });
       return;
     }
@@ -201,40 +207,47 @@ async function handleApiRequest(req, res, url) {
 
     const body = await readJsonBody(req);
     if (url.pathname === "/api/create-room") {
-      const code = await createUniqueRoomCode();
       const clientId = cleanClientId(body.clientId);
-      const room = createRoomState(code, cleanName(body.name, "Player 1"), clientId);
-      await saveRoom(room);
+      const room = await createPersistedRoom((code) => createRoomState(code, cleanName(body.name, "Player 1"), clientId));
+      const code = room.code;
       sendJsonResponse(res, { ok: true, code, seat: 0, snapshot: snapshotFor(room, 0) });
       return;
     }
 
     if (url.pathname === "/api/create-bot-room") {
-      const code = await createUniqueRoomCode();
       const clientId = cleanClientId(body.clientId);
-      const room = createBotRoomState(code, cleanName(body.name, "Player 1"), clientId);
-      await saveRoom(room);
+      const room = await createPersistedRoom((code) => createBotRoomState(code, cleanName(body.name, "Player 1"), clientId));
+      const code = room.code;
       sendJsonResponse(res, { ok: true, code, seat: 0, snapshot: snapshotFor(room, 0) });
       return;
     }
 
     if (url.pathname === "/api/join-room") {
-      const room = await loadRoom(body.code);
-      if (!room) {
+      const stableClientId = cleanClientId(body.clientId);
+      const mutation = await mutateRoom(body.code, (room) => {
+        const wasDisconnected = room.players.some((player) => player.clientId === stableClientId && !isSeatConnected(room, room.players.indexOf(player)));
+        const wasPlayerTwoConnected = isSeatConnected(room, 1);
+        const seat = claimSeat(room, stableClientId, body.name, body.seat);
+        if (seat === null) return { result: fail("Room is full."), seat: null, skipSave: true };
+        return {
+          result: ok(),
+          seat,
+          shouldNotify: seat === 1 && !wasPlayerTwoConnected,
+          shouldEmit: !body.heartbeat || wasDisconnected
+        };
+      });
+      if (!mutation.room) {
         sendJsonResponse(res, fail("Room not found."));
         return;
       }
-      const stableClientId = cleanClientId(body.clientId);
-      const wasDisconnected = room.players.some((player) => player.clientId === stableClientId && !player.connected);
-      const wasPlayerTwoConnected = room.players[1]?.connected;
-      const seat = claimSeat(room, stableClientId, body.name, body.seat);
-      if (seat === null) {
-        sendJsonResponse(res, fail("Room is full."));
+      if (!mutation.value?.result?.ok) {
+        sendJsonResponse(res, mutation.value?.result || fail("Could not join room."));
         return;
       }
-      if (seat === 1 && !wasPlayerTwoConnected) notifyPlayerJoined(room, 0, seat);
-      if (!body.heartbeat || wasDisconnected) emitRoom(room);
-      await saveRoom(room);
+      const room = mutation.room;
+      const seat = mutation.value.seat;
+      if (mutation.value.shouldNotify) notifyPlayerJoined(room, 0, seat);
+      if (mutation.value.shouldEmit) emitRoom(room);
       sendJsonResponse(res, { ok: true, code: room.code, seat, snapshot: snapshotFor(room, seat) });
       return;
     }
@@ -244,58 +257,60 @@ async function handleApiRequest(req, res, url) {
         sendJsonResponse(res, fail("Push notifications are not configured on this server."));
         return;
       }
-      const room = await loadRoom(body.code);
-      if (!room) {
+      const mutation = await mutateRoom(body.code, (room) => {
+        const seat = resolveSeat(room, body.clientId, body.seat);
+        touchSeatConnection(room, seat);
+        if (seat !== 0 && seat !== 1) return { result: fail("Join a room first."), seat, skipSave: true };
+        if (!isValidPushSubscription(body.subscription)) return { result: fail("Invalid notification subscription."), seat, skipSave: true };
+        room.pushSubscriptions[seat] = body.subscription;
+        room.notificationOptInAt[seat] = Date.now();
+        return { result: ok("Notifications enabled."), seat };
+      });
+      if (!mutation.room) {
         sendJsonResponse(res, fail("Room not found."));
         return;
       }
-      const seat = resolveSeat(room, body.clientId, body.seat);
-      touchSeatConnection(room, seat);
-      if (seat !== 0 && seat !== 1) {
-        sendJsonResponse(res, fail("Join a room first."));
-        return;
-      }
-      if (!isValidPushSubscription(body.subscription)) {
-        sendJsonResponse(res, fail("Invalid notification subscription."));
-        return;
-      }
-      room.pushSubscriptions[seat] = body.subscription;
-      room.notificationOptInAt[seat] = Date.now();
-      await saveRoom(room);
-      sendJsonResponse(res, ok("Notifications enabled."));
+      sendJsonResponse(res, mutation.value?.result || fail("Could not enable notifications."));
       return;
     }
 
     if (url.pathname === "/api/leave-room") {
-      const room = await loadRoom(body.code);
-      if (!room) {
+      const mutation = await mutateRoom(body.code, (room) => {
+        const seat = resolveSeat(room, body.clientId, body.seat);
+        releaseSeat(room, seat);
+        return { result: ok(), seat };
+      });
+      if (!mutation.room) {
         sendJsonResponse(res, ok());
         return;
       }
-      const seat = resolveSeat(room, body.clientId, body.seat);
-      releaseSeat(room, seat);
-      emitRoom(room);
-      await deleteRoomIfEmpty(room);
-      if (rooms.has(room.code)) await saveRoom(room);
+      emitRoom(mutation.room);
+      await deleteRoomIfEmpty(mutation.room);
       sendJsonResponse(res, ok());
       return;
     }
 
     if (url.pathname === "/api/action") {
-      const room = await loadRoom(body.code);
-      if (!room) {
+      const mutation = await mutateRoom(body.code, (room) => {
+        const seat = resolveSeat(room, body.clientId, body.seat);
+        touchSeatConnection(room, seat);
+        const action = body.action || {};
+        const existing = findProcessedAction(room, seat, action.actionId);
+        if (existing) return { result: existing.result, seat, duplicate: true, skipSave: true };
+        const result = performAction(room, seat, action);
+        if (result.ok) {
+          rememberProcessedAction(room, seat, action.actionId, result);
+          advanceBotIfNeeded(room);
+        }
+        return { result, seat };
+      });
+      if (!mutation.room) {
         sendJsonResponse(res, fail("Join a room first."));
         return;
       }
-      const seat = resolveSeat(room, body.clientId, body.seat);
-      touchSeatConnection(room, seat);
-      const result = performAction(room, seat, body.action || {});
-      if (result.ok) {
-        advanceBotIfNeeded(room);
-        emitRoom(room);
-      }
-      await saveRoom(room);
-      sendJsonResponse(res, { ...result, snapshot: snapshotFor(room, seat) });
+      const { result, seat, duplicate } = mutation.value;
+      if (result.ok && !duplicate) emitRoom(mutation.room);
+      sendJsonResponse(res, { ...result, snapshot: snapshotFor(mutation.room, seat) });
       return;
     }
 
@@ -357,7 +372,7 @@ function serveFile(res, filePath, contentType) {
 }
 
 async function redisCommand(command) {
-  if (!DURABLE_ROOM_STORE) return null;
+  if (!REDIS_ROOM_STORE) return null;
   const response = await fetch(REDIS_REST_URL, {
     method: "POST",
     headers: {
@@ -372,38 +387,172 @@ async function redisCommand(command) {
   return data.result;
 }
 
-async function loadRoom(code) {
-  const normalizedCode = String(code || "").trim().toUpperCase();
-  if (!normalizedCode) return null;
-  const cached = rooms.get(normalizedCode);
-  if (cached) return cached;
-  if (!DURABLE_ROOM_STORE) return null;
-  const raw = await redisCommand(["GET", `room:${normalizedCode}`]);
-  if (!raw) return null;
-  const room = JSON.parse(raw);
-  rooms.set(normalizedCode, room);
+function normalizeRoomCode(code) {
+  return String(code || "").trim().toUpperCase();
+}
+
+function roomStateForStorage(room) {
+  const state = structuredClone(room);
+  delete state._revision;
+  return state;
+}
+
+async function supabaseRequest(pathname, options = {}) {
+  if (!SUPABASE_ROOM_STORE) return null;
+  const authHeaders = SUPABASE_SERVICE_ROLE_KEY.startsWith("sb_secret_")
+    ? { apikey: SUPABASE_SERVICE_ROLE_KEY }
+    : { apikey: SUPABASE_SERVICE_ROLE_KEY, authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` };
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${pathname}`, {
+    method: options.method || "GET",
+    headers: {
+      ...authHeaders,
+      "content-type": "application/json",
+      ...(options.headers || {})
+    },
+    body: options.body === undefined ? undefined : JSON.stringify(options.body)
+  });
+  const raw = await response.text();
+  const data = raw ? JSON.parse(raw) : null;
+  if (!response.ok) {
+    const error = new Error(data?.message || data?.hint || "Supabase room store unavailable.");
+    error.status = response.status;
+    error.code = data?.code;
+    throw error;
+  }
+  return data;
+}
+
+function hydrateStoredRoom(row) {
+  if (!row?.state || !row.code) return null;
+  const room = row.state;
+  room.code = normalizeRoomCode(row.code);
+  room._revision = Number(row.revision || 1);
+  rooms.set(room.code, room);
   return room;
 }
 
-async function saveRoom(room) {
-  if (!room?.code) return;
-  rooms.set(room.code, room);
-  if (DURABLE_ROOM_STORE) {
-    await redisCommand(["SET", `room:${room.code}`, JSON.stringify(room), "EX", "21600"]);
+async function loadRoom(code) {
+  const normalizedCode = normalizeRoomCode(code);
+  if (!normalizedCode) return null;
+  if (SUPABASE_ROOM_STORE) {
+    const params = new URLSearchParams({
+      code: `eq.${normalizedCode}`,
+      expires_at: `gt.${new Date().toISOString()}`,
+      select: "code,state,revision",
+      limit: "1"
+    });
+    const rows = await supabaseRequest(`${SUPABASE_ROOM_TABLE}?${params.toString()}`);
+    return hydrateStoredRoom(rows?.[0]);
   }
+  if (REDIS_ROOM_STORE) {
+    const raw = await redisCommand(["GET", `room:${normalizedCode}`]);
+    if (!raw) return null;
+    const room = JSON.parse(raw);
+    room._revision = Number(room._revision || 1);
+    rooms.set(normalizedCode, room);
+    return room;
+  }
+  return rooms.get(normalizedCode) || null;
+}
+
+async function createRoomRecord(room) {
+  if (!room?.code) return null;
+  room.code = normalizeRoomCode(room.code);
+  if (SUPABASE_ROOM_STORE) {
+    const rows = await supabaseRequest(SUPABASE_ROOM_TABLE, {
+      method: "POST",
+      headers: { prefer: "return=representation" },
+      body: {
+        code: room.code,
+        state: roomStateForStorage(room),
+        revision: 1,
+        expires_at: new Date(Date.now() + ROOM_TTL_MS).toISOString()
+      }
+    });
+    return hydrateStoredRoom(rows?.[0]);
+  }
+  room._revision = Number(room._revision || 1);
+  rooms.set(room.code, room);
+  if (REDIS_ROOM_STORE) {
+    await redisCommand(["SET", `room:${room.code}`, JSON.stringify(room), "EX", String(ROOM_TTL_MS / 1000)]);
+  }
+  return room;
+}
+
+async function saveRoom(room, expectedRevision = null) {
+  if (!room?.code) return null;
+  room.code = normalizeRoomCode(room.code);
+  if (SUPABASE_ROOM_STORE) {
+    const revision = Number(expectedRevision ?? room._revision ?? 1);
+    const params = new URLSearchParams({
+      code: `eq.${room.code}`,
+      revision: `eq.${revision}`,
+      select: "code,state,revision"
+    });
+    const rows = await supabaseRequest(`${SUPABASE_ROOM_TABLE}?${params.toString()}`, {
+      method: "PATCH",
+      headers: { prefer: "return=representation" },
+      body: {
+        state: roomStateForStorage(room),
+        revision: revision + 1,
+        expires_at: new Date(Date.now() + ROOM_TTL_MS).toISOString(),
+        updated_at: new Date().toISOString()
+      }
+    });
+    return hydrateStoredRoom(rows?.[0]);
+  }
+  room._revision = Number(room._revision || 1) + 1;
+  rooms.set(room.code, room);
+  if (REDIS_ROOM_STORE) {
+    await redisCommand(["SET", `room:${room.code}`, JSON.stringify(room), "EX", String(ROOM_TTL_MS / 1000)]);
+  }
+  return room;
 }
 
 async function removeRoom(code) {
-  const normalizedCode = String(code || "").trim().toUpperCase();
+  const normalizedCode = normalizeRoomCode(code);
   if (!normalizedCode) return;
   rooms.delete(normalizedCode);
-  if (DURABLE_ROOM_STORE) await redisCommand(["DEL", `room:${normalizedCode}`]);
+  if (SUPABASE_ROOM_STORE) {
+    const params = new URLSearchParams({ code: `eq.${normalizedCode}` });
+    await supabaseRequest(`${SUPABASE_ROOM_TABLE}?${params.toString()}`, { method: "DELETE" });
+  } else if (REDIS_ROOM_STORE) {
+    await redisCommand(["DEL", `room:${normalizedCode}`]);
+  }
+}
+
+async function mutateRoom(code, mutator, maxAttempts = ROOM_MUTATION_RETRIES) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const source = await loadRoom(code);
+    if (!source) return { room: null, value: null };
+    const expectedRevision = Number(source._revision || 1);
+    const draft = structuredClone(source);
+    const value = await mutator(draft);
+    if (value?.skipSave) return { room: source, value };
+    const saved = await saveRoom(draft, expectedRevision);
+    if (saved) return { room: saved, value };
+    await new Promise((resolve) => setTimeout(resolve, 18 + attempt * 24 + Math.random() * 25));
+  }
+  throw new Error("The room changed at the same time. Please try that move again.");
 }
 
 async function createUniqueRoomCode() {
   let code = createRoomCode();
   while (await loadRoom(code)) code = createRoomCode();
   return code;
+}
+
+async function createPersistedRoom(factory) {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const code = await createUniqueRoomCode();
+    try {
+      const room = await createRoomRecord(factory(code));
+      if (room) return room;
+    } catch (error) {
+      if (error?.status !== 409) throw error;
+    }
+  }
+  throw new Error("Could not reserve a room code. Please try again.");
 }
 
 function handleUpgrade(req, socket) {
@@ -438,7 +587,8 @@ function handleUpgrade(req, socket) {
     roomCode: null,
     seat: null,
     buffer: Buffer.alloc(0),
-    closed: false
+    closed: false,
+    messageQueue: Promise.resolve()
   };
 
   clients.set(client.id, client);
@@ -490,7 +640,10 @@ function handleSocketData(client, chunk) {
         const mask = client.buffer.subarray(maskOffset, maskOffset + 4);
         payload = payload.map((byte, index) => byte ^ mask[index % 4]);
       }
-      handleClientMessage(client, payload.toString("utf8"));
+      const rawMessage = payload.toString("utf8");
+      client.messageQueue = client.messageQueue
+        .then(() => handleClientMessage(client, rawMessage))
+        .catch((error) => reply(client, null, fail(error.message || "Realtime action failed.")));
     }
 
     offset = frameEnd;
@@ -499,7 +652,7 @@ function handleSocketData(client, chunk) {
   client.buffer = client.buffer.subarray(offset);
 }
 
-function handleClientMessage(client, raw) {
+async function handleClientMessage(client, raw) {
   let message;
   try {
     message = JSON.parse(raw);
@@ -510,10 +663,9 @@ function handleClientMessage(client, raw) {
 
   const { id, event, payload } = message;
   if (event === "createRoom") {
-    const code = createRoomCode();
     const stableClientId = cleanClientId(payload?.clientId);
-    const room = createRoomState(code, cleanName(payload?.name, "Player 1"), stableClientId);
-    rooms.set(code, room);
+    const room = await createPersistedRoom((code) => createRoomState(code, cleanName(payload?.name, "Player 1"), stableClientId));
+    const code = room.code;
     client.clientId = stableClientId;
     client.roomCode = code;
     client.seat = 0;
@@ -523,10 +675,9 @@ function handleClientMessage(client, raw) {
   }
 
   if (event === "createBotRoom") {
-    const code = createRoomCode();
     const stableClientId = cleanClientId(payload?.clientId);
-    const room = createBotRoomState(code, cleanName(payload?.name, "Player 1"), stableClientId);
-    rooms.set(code, room);
+    const room = await createPersistedRoom((code) => createBotRoomState(code, cleanName(payload?.name, "Player 1"), stableClientId));
+    const code = room.code;
     client.clientId = stableClientId;
     client.roomCode = code;
     client.seat = 0;
@@ -536,54 +687,72 @@ function handleClientMessage(client, raw) {
   }
 
   if (event === "joinRoom") {
-    const room = rooms.get(String(payload?.code || "").trim().toUpperCase());
-    if (!room) {
+    const stableClientId = cleanClientId(payload?.clientId);
+    const mutation = await mutateRoom(payload?.code, (room) => {
+      const wasDisconnected = room.players.some((player, index) => player.clientId === stableClientId && !isSeatConnected(room, index));
+      const wasPlayerTwoConnected = isSeatConnected(room, 1);
+      const seat = claimSeat(room, stableClientId, payload?.name, payload?.seat);
+      if (seat === null) return { result: fail("Room is full."), seat: null, skipSave: true };
+      return {
+        result: ok(),
+        seat,
+        shouldNotify: seat === 1 && !wasPlayerTwoConnected,
+        shouldEmit: !payload?.heartbeat || wasDisconnected
+      };
+    });
+    if (!mutation.room) {
       reply(client, id, fail("Room not found."));
       return;
     }
-
-    const stableClientId = cleanClientId(payload?.clientId);
-    const wasDisconnected = room.players.some((player) => player.clientId === stableClientId && !player.connected);
-    const wasPlayerTwoConnected = room.players[1]?.connected;
-    const seat = claimSeat(room, stableClientId, payload?.name, payload?.seat);
-    if (seat === null) {
-      reply(client, id, fail("Room is full."));
+    if (!mutation.value?.result?.ok) {
+      reply(client, id, mutation.value?.result || fail("Could not join room."));
       return;
     }
+    const room = mutation.room;
+    const seat = mutation.value.seat;
     client.clientId = stableClientId;
     client.roomCode = room.code;
     client.seat = seat;
     reply(client, id, { ok: true, code: room.code, seat, snapshot: snapshotFor(room, seat) });
-    if (seat === 1 && !wasPlayerTwoConnected) notifyPlayerJoined(room, 0, seat);
-    if (!payload?.heartbeat || wasDisconnected) emitRoom(room);
+    if (mutation.value.shouldNotify) notifyPlayerJoined(room, 0, seat);
+    if (mutation.value.shouldEmit) emitRoom(room);
     return;
   }
 
   if (event === "gameAction") {
-    const room = getRoomForClientPayload(client, payload);
-    if (!room) {
+    const code = normalizeRoomCode(payload?.code || client.roomCode);
+    const stableClientId = cleanClientId(payload?.clientId || client.clientId);
+    const mutation = await mutateRoom(code, (room) => {
+      const seat = resolveSeat(room, stableClientId, payload?.seat ?? client.seat);
+      touchSeatConnection(room, seat);
+      const action = payload?.action || payload || {};
+      const existing = findProcessedAction(room, seat, action.actionId);
+      if (existing) return { result: existing.result, seat, duplicate: true, skipSave: true };
+      const result = performAction(room, seat, action);
+      if (result.ok) {
+        rememberProcessedAction(room, seat, action.actionId, result);
+        advanceBotIfNeeded(room);
+      }
+      return { result, seat };
+    });
+    if (!mutation.room) {
       reply(client, id, fail("Join a room first."));
       return;
     }
-
-    const stableClientId = cleanClientId(payload?.clientId || client.clientId);
-    const seat = resolveSeat(room, stableClientId, payload?.seat ?? client.seat);
+    const room = mutation.room;
+    const { seat, result, duplicate } = mutation.value;
     if (seat !== null) {
       client.clientId = stableClientId;
       client.roomCode = room.code;
       client.seat = seat;
     }
-    const result = performAction(room, seat, payload?.action || payload || {});
-    if (result.ok) {
-      advanceBotIfNeeded(room);
-      emitRoom(room);
-    }
+    if (result.ok && !duplicate) emitRoom(room);
     reply(client, id, { ...result, snapshot: snapshotFor(room, seat) });
     return;
   }
 
   if (event === "dragPreview") {
-    const room = getRoomForClientPayload(client, payload);
+    const room = await getRoomForClientPayload(client, payload);
     if (!room) return;
     const stableClientId = cleanClientId(payload?.clientId || client.clientId);
     const seat = resolveSeat(room, stableClientId, payload?.seat ?? client.seat);
@@ -600,12 +769,15 @@ function handleClientMessage(client, raw) {
   }
 
   if (event === "leaveRoom") {
-    const room = getRoomForClientPayload(client, payload);
-    if (room) {
+    const code = normalizeRoomCode(payload?.code || client.roomCode);
+    const mutation = await mutateRoom(code, (room) => {
       const seat = resolveSeat(room, payload?.clientId || client.clientId, payload?.seat ?? client.seat);
       releaseSeat(room, seat);
-      emitRoom(room);
-      void deleteRoomIfEmpty(room);
+      return { seat };
+    });
+    if (mutation.room) {
+      emitRoom(mutation.room);
+      await deleteRoomIfEmpty(mutation.room);
     }
     client.roomCode = null;
     client.seat = null;
@@ -629,9 +801,9 @@ function sendState(client, room) {
   send(client, { type: "state", snapshot: snapshotFor(room, client.seat) });
 }
 
-function getRoomForClientPayload(client, payload) {
-  const requestedCode = String(payload?.code || "").trim().toUpperCase();
-  return (requestedCode && rooms.get(requestedCode)) || (client.roomCode && rooms.get(client.roomCode)) || null;
+async function getRoomForClientPayload(client, payload) {
+  const requestedCode = normalizeRoomCode(payload?.code || client.roomCode);
+  return requestedCode ? loadRoom(requestedCode) : null;
 }
 
 function encodeFrame(payload) {
@@ -664,12 +836,10 @@ function closeClient(client) {
   handleClientDisconnect(client);
 }
 
-function handleClientDisconnect(client) {
+async function handleClientDisconnect(client) {
   if (!clients.has(client.id)) return;
   clients.delete(client.id);
 
-  const room = rooms.get(client.roomCode);
-  if (!room) return;
   const hasReplacement = Array.from(clients.values()).some((other) => (
     !other.closed &&
     other.roomCode === client.roomCode &&
@@ -677,19 +847,29 @@ function handleClientDisconnect(client) {
   ));
   if (hasReplacement) return;
 
-  const player = room.players.find((seat) => seat.clientId === client.clientId);
-  if (player) {
+  const mutation = await mutateRoom(client.roomCode, (room) => {
+    const player = room.players.find((seat) => seat.clientId === client.clientId);
+    if (!player) return { skipSave: true };
     const seatIndex = room.players.indexOf(player);
     player.connected = false;
     if (seatIndex >= 0 && room.phase !== "playing") room.ready[seatIndex] = false;
     setMessage(room.game, `${player.name} disconnected.`);
-    emitRoom(room);
-    void deleteRoomIfEmpty(room);
-  }
+    return { seatIndex };
+  }).catch(() => ({ room: null }));
+  if (!mutation.room || mutation.value?.skipSave) return;
+  emitRoom(mutation.room);
+  await deleteRoomIfEmpty(mutation.room);
 }
 
 function makeSeat(id, name, clientId, rank) {
-  return { id, name, clientId, connected: !!clientId, rank: rank || VISUAL_RANKS[id - 1] || "Court Duelist" };
+  return {
+    id,
+    name,
+    clientId,
+    connected: !!clientId,
+    lastSeenAt: clientId ? Date.now() : 0,
+    rank: rank || VISUAL_RANKS[id - 1] || "Court Duelist"
+  };
 }
 
 function createRoomState(code, playerName, clientId) {
@@ -705,6 +885,7 @@ function createRoomState(code, playerName, clientId) {
     pushSubscriptions: [null, null],
     notificationOptInAt: [0, 0],
     lastJoinNotificationAt: [0, 0],
+    recentActions: [],
     players: [
       makeSeat(1, playerName, clientId),
       makeSeat(2, "Player 2", null)
@@ -743,6 +924,7 @@ function claimSeat(room, clientId, name, requestedSeat = null) {
   if (existingIndex >= 0) {
     const wasDisconnected = !room.players[existingIndex].connected;
     room.players[existingIndex].connected = true;
+    room.players[existingIndex].lastSeenAt = Date.now();
     room.players[existingIndex].name = cleanName(name, `Player ${existingIndex + 1}`);
     if (wasDisconnected) setMessage(room.game, `${room.players[existingIndex].name} reconnected.`);
     return existingIndex;
@@ -768,6 +950,7 @@ function claimSeat(room, clientId, name, requestedSeat = null) {
 function assignSeat(room, seatIndex, clientId, name) {
   room.players[seatIndex].clientId = clientId;
   room.players[seatIndex].connected = true;
+  room.players[seatIndex].lastSeenAt = Date.now();
   room.players[seatIndex].name = cleanName(name, `Player ${seatIndex + 1}`);
   if (room.phase !== "playing") room.ready[seatIndex] = false;
   room.joinedAt = Date.now();
@@ -792,7 +975,18 @@ function resolveSeat(room, clientId, requestedSeat) {
 function touchSeatConnection(room, seatIndex) {
   if (seatIndex !== 0 && seatIndex !== 1) return;
   if (seatIndex === room.botSeat) return;
-  if (room.players[seatIndex]?.clientId) room.players[seatIndex].connected = true;
+  if (room.players[seatIndex]?.clientId) {
+    room.players[seatIndex].connected = true;
+    room.players[seatIndex].lastSeenAt = Date.now();
+  }
+}
+
+function isSeatConnected(room, seatIndex) {
+  if (seatIndex === room.botSeat) return true;
+  const player = room.players?.[seatIndex];
+  if (!player?.clientId || !player.connected) return false;
+  if (!player.lastSeenAt) return true;
+  return Date.now() - Number(player.lastSeenAt) < PLAYER_PRESENCE_TTL_MS;
 }
 
 function releaseSeat(room, seatIndex) {
@@ -800,6 +994,7 @@ function releaseSeat(room, seatIndex) {
   if (seatIndex === room.botSeat) return;
   const player = room.players[seatIndex];
   player.connected = false;
+  player.lastSeenAt = 0;
   player.clientId = null;
   room.ready[seatIndex] = false;
   if (room.phase !== "playing") setMessage(room.game, `${player.name} left the waiting room.`);
@@ -879,7 +1074,9 @@ function snapshotFor(room, seat) {
       phase: room.phase,
       ready: room.ready,
       joinedAt: room.joinedAt,
-      startedAt: room.startedAt
+      startedAt: room.startedAt,
+      revision: Number(room._revision || 1),
+      serverTime: Date.now()
     },
     you: { seat },
     game: {
@@ -887,7 +1084,7 @@ function snapshotFor(room, seat) {
       players: room.game.players.map((player, index) => ({
         id: player.id,
         name: room.players[index]?.name || `Player ${index + 1}`,
-        connected: room.players[index]?.connected || false,
+        connected: isSeatConnected(room, index),
         ready: room.ready[index] || false,
         rank: room.players[index]?.rank || VISUAL_RANKS[index] || "Court Duelist",
         hand: seat === index ? player.hand : null,
@@ -984,6 +1181,24 @@ function startMatch(room) {
   setMessage(room.game, "Both duelists are ready. Player 1 starts.");
 }
 
+function cleanActionId(value) {
+  return String(value || "").replace(/[^\w-]/g, "").slice(0, 80);
+}
+
+function findProcessedAction(room, seat, actionId) {
+  const id = cleanActionId(actionId);
+  if (!id) return null;
+  return (room.recentActions || []).find((entry) => entry.seat === seat && entry.id === id) || null;
+}
+
+function rememberProcessedAction(room, seat, actionId, result) {
+  const id = cleanActionId(actionId);
+  if (!id) return;
+  room.recentActions ||= [];
+  room.recentActions.push({ seat, id, result: { ok: !!result.ok, message: result.message }, at: Date.now() });
+  if (room.recentActions.length > 48) room.recentActions.splice(0, room.recentActions.length - 48);
+}
+
 function performAction(room, seat, action) {
   const game = room.game;
   if (action.type === "restart") {
@@ -1009,7 +1224,7 @@ function performAction(room, seat, action) {
   if (seat !== 0 && seat !== 1) return fail("Spectators cannot move.");
   if (action.type === "ready") {
     if (room.mode === "quickplay") return ok("Quickplay is already underway.");
-    if (!room.players.every((player) => player.connected)) return fail("Wait for both duelists to connect.");
+    if (![0, 1].every((index) => isSeatConnected(room, index))) return fail("Wait for both duelists to connect.");
     if (room.phase === "playing") return ok("Match already started.");
     room.ready[seat] = true;
     setMessage(game, `${room.players[seat].name} is ready.`);
