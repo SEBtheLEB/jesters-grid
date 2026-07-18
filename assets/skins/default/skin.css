@@ -15,6 +15,7 @@
   --skin-tile-empty: url("/assets/ui/gameplay-generated/tile-face.png");
   --skin-tile-symbol: none;
   --skin-card-frame: url("/assets/ui/gameplay-generated/game-card-frame.png");
+  --skin-board-card-frame: none;
   --skin-card-art-default: none;
   --skin-card-art-1: url("/assets/ui/gameplay-generated/card-art-1.png");
   --skin-card-art-2: url("/assets/ui/gameplay-generated/card-art-2.png");

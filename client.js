@@ -1478,10 +1478,10 @@ function tileCenter(index) {
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, rect, tile };
 }
 
-function boardCardHtml(card) {
+function boardCardHtml(card, displayValue = card?.value) {
   return `
-    <div class="power-badge">${card?.value ?? ""}</div>
-    <div class="suit-badge">JG</div>
+    <div class="power-badge">${displayValue ?? ""}</div>
+    <div class="suit-badge">P${card?.owner ?? ""}</div>
     <div class="card-art"></div>
     <div class="card-name">${CARD_NAMES[card?.value] || "Card"}</div>
   `;
@@ -1533,11 +1533,12 @@ async function playPlacementVfx(event) {
   finalCard?.classList.add("cutscene-card-pending");
   const start = cardTravelStart(event.card.owner);
   const ghost = document.createElement("div");
-  ghost.className = `card cutscene-placement-card p${event.card.owner}-card card-v${event.card.value}`;
+  ghost.className = `card board-card cutscene-placement-card p${event.card.owner}-card card-v${event.card.value}`;
   ghost.style.left = `${start.x}px`;
   ghost.style.top = `${start.y}px`;
-  ghost.style.width = `${Math.max(44, target.rect.width * 0.78)}px`;
-  ghost.style.height = `${Math.max(52, target.rect.height * 0.84)}px`;
+  const ghostSize = Math.max(44, Math.min(target.rect.width, target.rect.height) * 0.98);
+  ghost.style.width = `${ghostSize}px`;
+  ghost.style.height = `${ghostSize}px`;
   ghost.style.setProperty("--travel-rot", `${start.rotation}deg`);
   ghost.innerHTML = boardCardHtml(event.card);
   document.body.appendChild(ghost);
@@ -1588,11 +1589,12 @@ function spawnRemovedCardEcho(index, card) {
   const center = tileCenter(index);
   if (!center || !card) return null;
   const echo = document.createElement("div");
-  echo.className = `card cutscene-removed-card p${card.owner}-card card-v${card.value}`;
+  echo.className = `card board-card cutscene-removed-card p${card.owner}-card card-v${card.value}`;
   echo.style.left = `${center.x}px`;
   echo.style.top = `${center.y}px`;
-  echo.style.width = `${Math.max(44, center.rect.width * 0.78)}px`;
-  echo.style.height = `${Math.max(52, center.rect.height * 0.84)}px`;
+  const echoSize = Math.max(44, Math.min(center.rect.width, center.rect.height) * 0.98);
+  echo.style.width = `${echoSize}px`;
+  echo.style.height = `${echoSize}px`;
   echo.innerHTML = boardCardHtml(card);
   document.body.appendChild(echo);
   boardTimeout(() => echo.classList.add("hit"), 420);
@@ -1605,11 +1607,12 @@ function retainShotTarget(event) {
   const center = tileCenter(event.to);
   if (!center) return null;
   const retained = document.createElement("div");
-  retained.className = `card cutscene-retained-card p${event.removedCard.owner}-card card-v${event.removedCard.value}`;
+  retained.className = `card board-card cutscene-retained-card p${event.removedCard.owner}-card card-v${event.removedCard.value}`;
   retained.style.left = `${center.x}px`;
   retained.style.top = `${center.y}px`;
-  retained.style.width = `${Math.max(44, center.rect.width * 0.78)}px`;
-  retained.style.height = `${Math.max(52, center.rect.height * 0.84)}px`;
+  const retainedSize = Math.max(44, Math.min(center.rect.width, center.rect.height) * 0.98);
+  retained.style.width = `${retainedSize}px`;
+  retained.style.height = `${retainedSize}px`;
   retained.innerHTML = `${boardCardHtml(event.removedCard)}${boardTokenStripHtml(event.returnedTokens)}`;
   document.body.appendChild(retained);
   event.retainedTarget = retained;
@@ -1634,11 +1637,12 @@ function spawnReturningCardEcho(index, card, order = 0) {
   if (!center || !card) return;
   const target = pieceReturnTarget(card.owner, "card");
   const echo = document.createElement("div");
-  echo.className = `card cutscene-return-card p${card.owner}-card card-v${card.value}`;
+  echo.className = `card board-card cutscene-return-card p${card.owner}-card card-v${card.value}`;
   echo.style.left = `${center.x}px`;
   echo.style.top = `${center.y}px`;
-  echo.style.width = `${Math.max(42, center.rect.width * 0.72)}px`;
-  echo.style.height = `${Math.max(50, center.rect.height * 0.78)}px`;
+  const echoSize = Math.max(42, Math.min(center.rect.width, center.rect.height) * 0.92);
+  echo.style.width = `${echoSize}px`;
+  echo.style.height = `${echoSize}px`;
   echo.innerHTML = boardCardHtml(card);
   document.body.appendChild(echo);
   boardTimeout(() => {
@@ -1750,11 +1754,12 @@ async function playSweepVfx(event) {
 
   const start = cardTravelStart(event.card.owner);
   const ghost = document.createElement("div");
-  ghost.className = `card cutscene-placement-card p${event.card.owner}-card card-v${event.card.value}`;
+  ghost.className = `card board-card cutscene-placement-card p${event.card.owner}-card card-v${event.card.value}`;
   ghost.style.left = `${start.x}px`;
   ghost.style.top = `${start.y}px`;
-  ghost.style.width = `${Math.max(44, target.rect.width * 0.78)}px`;
-  ghost.style.height = `${Math.max(52, target.rect.height * 0.84)}px`;
+  const ghostSize = Math.max(44, Math.min(target.rect.width, target.rect.height) * 0.98);
+  ghost.style.width = `${ghostSize}px`;
+  ghost.style.height = `${ghostSize}px`;
   ghost.style.setProperty("--travel-rot", `${start.rotation}deg`);
   ghost.innerHTML = boardCardHtml(event.card);
   document.body.appendChild(ghost);
@@ -3636,16 +3641,11 @@ function renderBoard() {
 
     if (top) {
       const card = document.createElement("div");
-      card.className = `card p${top.owner}-card card-v${top.value}`;
+      card.className = `card board-card p${top.owner}-card card-v${top.value}`;
       if (top.value === 14 || tile.locked) card.classList.add("locked");
       if (top.stunned || tile.stunTurns > 0) card.classList.add("stunned");
       if (game.pendingShot && game.pendingShot.fromIndex === index) card.classList.add("shooter-ready");
-      card.innerHTML = `
-        <div class="power-badge">${effectiveValue(top, tile)}</div>
-        <div class="suit-badge">JG</div>
-        <div class="card-art"></div>
-        <div class="card-name">${CARD_NAMES[top.value]}</div>
-      `;
+      card.innerHTML = boardCardHtml(top, effectiveValue(top, tile));
 
       const strip = document.createElement("div");
       strip.className = "token-strip";
