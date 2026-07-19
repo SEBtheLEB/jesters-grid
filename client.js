@@ -1667,6 +1667,16 @@ function prepareBoardCutsceneVisuals(events) {
         event.revealedTarget?.classList.add("stack-reveal-waiting");
       }
     }
+    if (event.type === "potion-cleanse" || event.type === "stun-clear") {
+      event.stunTile = boardEl.querySelector(`[data-tile-index="${event.tile}"]`);
+      if (event.stunTile && !event.stunTile.querySelector(".witch-hex-marker")) {
+        event.stunMarker = createWitchHexMarker("retained-hex");
+        event.stunTile.appendChild(event.stunMarker);
+      } else {
+        event.stunMarker = event.stunTile?.querySelector(".witch-hex-marker") || null;
+      }
+      event.stunTile?.classList.add("stun-clear-pending");
+    }
   });
 }
 
@@ -1680,6 +1690,10 @@ function clearBoardCutsceneVisuals(events) {
     event.coveredLayer = null;
     event.revealedTarget?.classList.remove("stack-reveal-waiting", "stack-reveal");
     event.revealedTarget = null;
+    event.stunTile?.classList.remove("stun-clear-pending", "stun-cleared-vfx", "potion-cleansing");
+    event.stunTile = null;
+    event.stunMarker?.remove();
+    event.stunMarker = null;
   });
 }
 
@@ -1761,10 +1775,34 @@ function stunTileVfx(index) {
   boardTimeout(() => rune.remove(), 940);
 }
 
-function stunClearVfx(index) {
+function createWitchHexMarker(extraClass = "") {
+  const marker = document.createElement("span");
+  marker.className = `witch-hex-marker ${extraClass}`.trim();
+  marker.setAttribute("aria-hidden", "true");
+  marker.innerHTML = "<b></b><i></i><i></i><i></i>";
+  return marker;
+}
+
+function stunClearVfx(index, potionCleanse = false) {
   const center = tileCenter(index);
   if (!center) return;
-  pulseTile(index, "stun-cleared-vfx", 720);
+  const marker = center.tile.querySelector(".witch-hex-marker");
+  pulseTile(index, potionCleanse ? "potion-cleansing" : "stun-cleared-vfx", potionCleanse ? 1850 : 1350);
+  marker?.classList.add(potionCleanse ? "potion-dissolving" : "naturally-dissolving");
+
+  if (!potionCleanse) return;
+  const burst = document.createElement("div");
+  const size = Math.max(64, Math.min(center.rect.width, center.rect.height) * 1.08);
+  burst.className = "potion-cleanse-burst";
+  burst.style.left = `${center.x}px`;
+  burst.style.top = `${center.y}px`;
+  burst.style.width = `${size}px`;
+  burst.style.height = `${size}px`;
+  burst.innerHTML = Array.from({ length: 7 }, (_value, order) => (
+    `<i style="--drop-angle:${order * (360 / 7)}deg;--drop-distance:${Math.round(size * (.44 + (order % 2) * .09))}px;--drop-delay:${order * 45}ms"></i>`
+  )).join("");
+  document.body.appendChild(burst);
+  boardTimeout(() => burst.remove(), 1900);
 }
 
 function tokenKey(token) {
@@ -2037,7 +2075,8 @@ function detectBoardCutscenes(previousSnapshot, nextSnapshot) {
     if (stunLevelFromGame(previousGame, index) <= 0 && stunLevelFromGame(nextGame, index) > 0) {
       events.push({ type: "witch-stun", tile: index });
     } else if (stunLevelFromGame(previousGame, index) > 0 && stunLevelFromGame(nextGame, index) <= 0) {
-      events.push({ type: "stun-clear", tile: index });
+      const potionUsedHere = tokenAdditions.some((event) => event.tile === index && event.token?.type === "potion");
+      events.push({ type: potionUsedHere ? "potion-cleanse" : "stun-clear", tile: index });
     }
   }
 
@@ -2072,9 +2111,15 @@ async function playBoardCutscenes(events) {
         await waitForCutscene(760);
       }
       if (event.type === "stun-clear") {
-        setBoardCutsceneMessage("Curious Potion breaks the stun.");
-        stunClearVfx(event.tile);
-        await waitForCutscene(640);
+        setBoardCutsceneMessage("The Witch's binding fades.");
+        stunClearVfx(event.tile, false);
+        await waitForCutscene(1350);
+      }
+      if (event.type === "potion-cleanse") {
+        setBoardCutsceneMessage("Curious Potion dissolves the Witch's binding.");
+        gameAudio.play("token");
+        stunClearVfx(event.tile, true);
+        await waitForCutscene(1850);
       }
     }
   } finally {
@@ -3699,13 +3744,14 @@ function renderBoard() {
     tileEl.className = "tile";
     tileEl.dataset.tileIndex = String(index);
     const top = topCard(tile);
+    const tileIsStunned = tile.stunTurns > 0 || !!top?.stunned;
     const topKey = top ? `${top.owner}:${top.value}:${tile.stack.length}:${tile.locked}:${top.stunned}:${tile.stunTurns}` : "empty";
     const tokenKeys = tile.tokens.map((token, tokenIndex) => String(token.id ?? `${token.owner}-${token.type}-${tokenIndex}`));
     const previousTileTokens = new Set(previousBoardTokenKeys[index] || []);
     nextTopKeys[index] = topKey;
     nextTokenKeys[index] = tokenKeys;
 
-    if (tile.stunTurns > 0 || top?.stunned) tileEl.classList.add("stunned");
+    if (tileIsStunned) tileEl.classList.add("stunned");
     if (game.lastPlacedTileIndex === index) tileEl.classList.add("last-placed");
     if (isSelectableTile(index)) tileEl.classList.add("selectable");
     if (isTargetableTile(index)) tileEl.classList.add("targetable");
@@ -3731,7 +3777,7 @@ function renderBoard() {
       const card = document.createElement("div");
       card.className = `card board-card board-card-top p${top.owner}-card card-v${top.value}`;
       if (top.value === 14 || tile.locked) card.classList.add("locked");
-      if (top.stunned || tile.stunTurns > 0) card.classList.add("stunned");
+      if (tileIsStunned) card.classList.add("stunned");
       if (game.pendingShot && game.pendingShot.fromIndex === index) card.classList.add("shooter-ready");
       card.innerHTML = boardCardHtml(top, effectiveValue(top, tile));
 
@@ -3762,7 +3808,12 @@ function renderBoard() {
       }
 
       const ownerName = game.players?.[top.owner - 1]?.name || `Player ${top.owner}`;
-      tileEl.setAttribute("aria-label", `${effectiveValue(top, tile)} ${CARD_NAMES[top.value]}, ${ownerName}, stack of ${tile.stack.length}`);
+      tileEl.setAttribute("aria-label", `${effectiveValue(top, tile)} ${CARD_NAMES[top.value]}, ${ownerName}, stack of ${tile.stack.length}${tileIsStunned ? ", stunned by Witch" : ""}`);
+    }
+
+    if (tileIsStunned) {
+      tileEl.appendChild(createWitchHexMarker());
+      if (!top) tileEl.setAttribute("aria-label", `Tile ${index + 1}, stunned by Witch`);
     }
 
     if (remoteDragPreview?.tileIndex === index) {

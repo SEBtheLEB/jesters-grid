@@ -8414,3 +8414,252 @@ body > .board-card.locked {
     min-height: 50px;
   }
 }
+
+/* Witch bindings remain readable for their full lifetime. The marker is live
+   DOM so the potion cutscene can retain and dissolve it after state updates. */
+#gameScreen .tile > .witch-hex-marker {
+  position: absolute;
+  inset: 3px;
+  z-index: 16;
+  display: block;
+  overflow: hidden;
+  pointer-events: none;
+  border: 1px solid rgba(176, 139, 244, .78);
+  border-radius: 8%;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(134, 93, 204, .2), transparent 55%),
+    linear-gradient(135deg, rgba(83, 50, 135, .22), transparent 38% 62%, rgba(83, 50, 135, .2));
+  box-shadow:
+    inset 0 0 0 1px rgba(229, 207, 255, .13),
+    inset 0 0 18px rgba(110, 67, 179, .34),
+    0 0 12px rgba(159, 112, 230, .34);
+  opacity: .92;
+  filter: drop-shadow(0 0 5px rgba(173, 126, 238, .28));
+  animation: witchHexBreath 2.8s ease-in-out infinite;
+  transform-origin: center;
+}
+
+#gameScreen .witch-hex-marker::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 58%;
+  aspect-ratio: 1;
+  border: 1px solid rgba(222, 200, 255, .78);
+  background:
+    linear-gradient(45deg, transparent 43%, rgba(222, 200, 255, .5) 44% 48%, transparent 49% 51%, rgba(222, 200, 255, .5) 52% 56%, transparent 57%),
+    radial-gradient(circle, transparent 0 37%, rgba(177, 137, 238, .5) 38% 41%, transparent 42%);
+  box-shadow: 0 0 8px rgba(184, 143, 244, .42), inset 0 0 8px rgba(184, 143, 244, .24);
+  transform: translate(-50%, -50%) rotate(45deg);
+  animation: witchSigilTurn 8s linear infinite;
+}
+
+#gameScreen .witch-hex-marker::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18%;
+  aspect-ratio: 1;
+  border: 1px solid rgba(244, 224, 169, .84);
+  background: rgba(125, 81, 194, .58);
+  box-shadow: 0 0 10px rgba(199, 159, 255, .7);
+  transform: translate(-50%, -50%) rotate(45deg);
+  animation: witchCorePulse 1.7s ease-in-out infinite;
+}
+
+#gameScreen .witch-hex-marker b {
+  position: absolute;
+  inset: 9%;
+  border: 1px dashed rgba(209, 179, 252, .44);
+  border-radius: 50%;
+  animation: witchOrbit 10s linear infinite reverse;
+}
+
+#gameScreen .witch-hex-marker i {
+  position: absolute;
+  width: clamp(3px, .75cqw, 6px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #dbc0ff;
+  box-shadow: 0 0 7px #b984ff, 0 0 12px rgba(235, 214, 255, .48);
+  animation: witchMoteDrift 2.6s ease-in-out infinite;
+}
+
+#gameScreen .witch-hex-marker i:nth-of-type(1) {
+  left: 18%;
+  top: 22%;
+}
+
+#gameScreen .witch-hex-marker i:nth-of-type(2) {
+  right: 17%;
+  top: 31%;
+  animation-delay: -.9s;
+}
+
+#gameScreen .witch-hex-marker i:nth-of-type(3) {
+  left: 39%;
+  bottom: 13%;
+  animation-delay: -1.65s;
+}
+
+#gameScreen .tile.stunned > .board-card-top {
+  filter: saturate(.58) brightness(.84) contrast(1.04);
+}
+
+#gameScreen .tile.stunned:hover > .witch-hex-marker,
+#gameScreen .tile.stunned:focus-visible > .witch-hex-marker {
+  opacity: .74;
+}
+
+#gameScreen .tile.stun-clear-pending > .witch-hex-marker {
+  opacity: .94;
+}
+
+#gameScreen .tile > .witch-hex-marker.naturally-dissolving {
+  animation: witchHexNaturalFade 1.35s ease-out forwards;
+}
+
+#gameScreen .tile > .witch-hex-marker.potion-dissolving {
+  animation: witchHexPotionDissolve 1.85s cubic-bezier(.18, .88, .22, 1) forwards;
+}
+
+#gameScreen .tile.potion-cleansing {
+  animation: potionTileCleanse 1.85s ease both;
+}
+
+.potion-cleanse-burst {
+  position: fixed;
+  z-index: 432;
+  pointer-events: none;
+  border: 2px solid rgba(156, 234, 193, .92);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(226, 255, 221, .48), rgba(107, 211, 171, .2) 38%, transparent 66%),
+    conic-gradient(from 18deg, transparent, rgba(239, 207, 115, .72), transparent 22%, rgba(126, 224, 186, .68), transparent 54%);
+  box-shadow:
+    0 0 18px rgba(126, 224, 186, .66),
+    inset 0 0 20px rgba(239, 207, 115, .3);
+  transform: translate(-50%, -50%) scale(.32) rotate(-18deg);
+  animation: potionCleanseBloom 1.85s cubic-bezier(.18, .88, .22, 1) both;
+}
+
+.potion-cleanse-burst::before,
+.potion-cleanse-burst::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.potion-cleanse-burst::before {
+  width: 72%;
+  height: 72%;
+  border: 2px dashed rgba(245, 218, 138, .9);
+  animation: potionRingSpin 1.45s ease-out both;
+}
+
+.potion-cleanse-burst::after {
+  width: 22%;
+  height: 22%;
+  background: #d9f7bd;
+  box-shadow: 0 0 16px #8fe2b8, 0 0 28px rgba(245, 218, 138, .64);
+  animation: potionCoreFlash 1.3s ease-out both;
+}
+
+.potion-cleanse-burst i {
+  --drop-angle: 0deg;
+  --drop-distance: 40px;
+  --drop-delay: 0ms;
+  position: absolute;
+  left: calc(50% - 4px);
+  top: calc(50% - 4px);
+  z-index: 2;
+  width: 8px;
+  height: 8px;
+  border-radius: 64% 36% 62% 38%;
+  background: #c7f2c4;
+  box-shadow: 0 0 8px rgba(126, 224, 186, .9);
+  opacity: 0;
+  transform: rotate(var(--drop-angle)) translateX(0) scale(.4);
+  animation: potionDropletScatter 1.3s cubic-bezier(.18, .88, .22, 1) var(--drop-delay) both;
+}
+
+@keyframes witchHexBreath {
+  0%, 100% { opacity: .76; filter: brightness(.9) drop-shadow(0 0 4px rgba(173, 126, 238, .25)); }
+  50% { opacity: .98; filter: brightness(1.16) drop-shadow(0 0 10px rgba(173, 126, 238, .56)); }
+}
+
+@keyframes witchSigilTurn {
+  from { transform: translate(-50%, -50%) rotate(45deg); }
+  to { transform: translate(-50%, -50%) rotate(405deg); }
+}
+
+@keyframes witchOrbit {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes witchCorePulse {
+  0%, 100% { opacity: .66; scale: .82; }
+  50% { opacity: 1; scale: 1.18; }
+}
+
+@keyframes witchMoteDrift {
+  0%, 100% { opacity: .35; transform: translateY(5px) scale(.7); }
+  50% { opacity: 1; transform: translateY(-7px) scale(1.15); }
+}
+
+@keyframes witchHexNaturalFade {
+  0% { opacity: .94; transform: scale(1); filter: brightness(1.08); }
+  100% { opacity: 0; transform: scale(1.08); filter: brightness(1.4) blur(2px); }
+}
+
+@keyframes witchHexPotionDissolve {
+  0% { opacity: .96; transform: scale(1); filter: hue-rotate(0deg) brightness(1); }
+  42% { opacity: 1; transform: scale(.96); filter: hue-rotate(48deg) brightness(1.55); }
+  72% { opacity: .58; transform: scale(1.09) rotate(2deg); filter: hue-rotate(82deg) brightness(1.8) blur(1px); }
+  100% { opacity: 0; transform: scale(1.2) rotate(5deg); filter: hue-rotate(102deg) brightness(1.6) blur(4px); }
+}
+
+@keyframes potionTileCleanse {
+  0%, 100% { filter: brightness(1); }
+  38% { filter: brightness(1.42) saturate(.78); box-shadow: inset 0 0 0 2px rgba(139, 229, 186, .9), 0 0 30px rgba(121, 220, 175, .56); }
+}
+
+@keyframes potionCleanseBloom {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.28) rotate(-18deg); }
+  28% { opacity: 1; }
+  62% { opacity: .96; transform: translate(-50%, -50%) scale(1.06) rotate(12deg); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.4) rotate(31deg); }
+}
+
+@keyframes potionRingSpin {
+  0% { opacity: 0; transform: translate(-50%, -50%) rotate(-40deg) scale(.5); }
+  45% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(130deg) scale(1.32); }
+}
+
+@keyframes potionCoreFlash {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.4); }
+  34% { opacity: 1; transform: translate(-50%, -50%) scale(1.25); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(.1); }
+}
+
+@keyframes potionDropletScatter {
+  0% { opacity: 0; transform: rotate(var(--drop-angle)) translateX(0) scale(.4); }
+  28% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(var(--drop-angle)) translateX(var(--drop-distance)) scale(.12); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #gameScreen .tile > .witch-hex-marker,
+  #gameScreen .witch-hex-marker::before,
+  #gameScreen .witch-hex-marker::after,
+  #gameScreen .witch-hex-marker b,
+  #gameScreen .witch-hex-marker i {
+    animation: none;
+  }
+}
