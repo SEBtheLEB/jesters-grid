@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const http = require("http");
 const path = require("path");
+const { createBotStrategy } = require("./bot-strategy");
 let webpush = null;
 try {
   webpush = require("web-push");
@@ -144,6 +145,7 @@ function handleHttpRequest(req, res) {
   const files = {
     "/": ["index.html", "text/html; charset=utf-8"],
     "/index.html": ["index.html", "text/html; charset=utf-8"],
+    "/bot-strategy.js": ["bot-strategy.js", "text/javascript; charset=utf-8"],
     "/client.js": ["client.js", "text/javascript; charset=utf-8"],
     "/styles.css": ["styles.css", "text/css; charset=utf-8"],
     "/manifest.webmanifest": ["manifest.webmanifest", "application/manifest+json; charset=utf-8"],
@@ -1648,6 +1650,8 @@ function checkWin(game) {
   if (!winner) return;
   game.gameOver = true;
   game.winner = winner;
+  game.pendingShot = null;
+  game.pendingWitchTile = null;
   setMessage(game, `Player ${winner} wins.`);
 }
 
@@ -1741,21 +1745,32 @@ function forceBotTurnEnd(game) {
   setMessage(game, `${BOT_NAME} found no legal card. Your turn.`);
 }
 
+const BOT_STRATEGY = createBotStrategy({
+  winLines: WIN_LINES,
+  topCard,
+  effectiveValue,
+  isShooter,
+  canStunTile,
+  canPlaceCard,
+  getShotTargets,
+  getHighCardShotTargets
+});
+
 function resolveBotPending(game) {
   if (game.pendingShot) {
-    let target = chooseBotShotTarget(game);
-    if (target === null) {
+    let plan = BOT_STRATEGY.chooseShotPlan(game);
+    if (plan?.usePierce) {
       const pierced = applyArmorPierceToPendingShot(game);
-      if (pierced.ok) target = chooseBotShotTarget(game);
+      plan = pierced.ok ? BOT_STRATEGY.chooseShotPlan(game) : null;
     }
-    if (target !== null) resolveShot(game, target);
+    if (plan?.tileIndex !== undefined) resolveShot(game, plan.tileIndex);
     else cancelSelection(game);
     return true;
   }
 
   if (game.pendingWitchTile !== null) {
-    const target = chooseBotWitchTarget(game);
-    if (target !== null) resolveWitchStun(game, target);
+    const target = BOT_STRATEGY.chooseWitchTarget(game);
+    if (target) resolveWitchStun(game, target.tileIndex);
     else {
       game.pendingWitchTile = null;
       setMessage(game, `${BOT_NAME} found no non-Jester tile to stun.`);
@@ -1766,313 +1781,14 @@ function resolveBotPending(game) {
   return false;
 }
 
-function chooseBotShotTarget(game) {
-  const targets = game.pendingShot?.targets || [];
-  if (targets.length === 0) return null;
-  let best = null;
-  let bestScore = -Infinity;
-  targets.forEach((index) => {
-    const card = topCard(game.board[index]);
-    if (!card) return;
-    const score = card.value * 90 + tileLinePressure(game, index, card.owner) + (card.protected ? -900 : 0);
-    if (score > bestScore) {
-      bestScore = score;
-      best = index;
-    }
-  });
-  return best;
-}
-
-function chooseBotWitchTarget(game) {
-  const botId = currentPlayer(game).id;
-  const enemyId = botId === 1 ? 2 : 1;
-  let best = null;
-  let bestScore = -Infinity;
-
-  game.board.forEach((tile, index) => {
-    const score = botStunTargetScore(game, index, botId, enemyId, game.pendingWitchTile);
-    if (score > bestScore) {
-      bestScore = score;
-      best = index;
-    }
-  });
-
-  return bestScore > -Infinity ? best : null;
-}
-
-function bestBotStunTargetScore(game, sourceTileIndex, botId) {
-  const enemyId = botId === 1 ? 2 : 1;
-  return game.board.reduce((best, _tile, index) => {
-    const score = botStunTargetScore(game, index, botId, enemyId, sourceTileIndex);
-    return Math.max(best, score);
-  }, -Infinity);
-}
-
-function botStunTargetScore(game, index, botId, enemyId, sourceTileIndex = null) {
-  if (!canStunTile(game, index, sourceTileIndex)) return -Infinity;
-
-  const tile = game.board[index];
-  const card = topCard(tile);
-  const enemyThreats = getThreatTilesForOwner(game, enemyId);
-  const botThreats = getThreatTilesForOwner(game, botId);
-  let score = 0;
-
-  if (enemyThreats.has(index)) score += 1800;
-  if (botThreats.has(index)) score -= 220;
-  if ([5, 6, 9, 10].includes(index)) score += 42;
-  if ([0, 3, 12, 15].includes(index)) score += 18;
-
-  if (!card) return score + (enemyThreats.has(index) ? 460 : 18);
-
-  if (card.owner === enemyId) {
-    score += card.value * 70 + tileLinePressure(game, index, enemyId);
-    if (isShooter(card, tile)) score += 520;
-    if (card.value >= 10) score += 180;
-    if (card.protected) score -= 70;
-    return score;
-  }
-
-  score -= 380;
-  score += Math.max(0, 14 - card.value) * 6;
-  if (card.value <= 2) score += 80;
-  return score;
-}
 
 function chooseBotCardMove(game) {
-  const player = currentPlayer(game);
-  const blockThreats = getThreatTilesForOwner(game, player.id === 1 ? 2 : 1);
-  let best = null;
-  let bestScore = -Infinity;
-
-  player.hand.forEach((value, handIndex) => {
-    game.board.forEach((_tile, tileIndex) => {
-      if (!canPlaceCard(game, tileIndex, value)) return;
-      const score = scoreBotCardMove(game, handIndex, tileIndex, blockThreats) + Math.random() * 6;
-      if (score > bestScore) {
-        bestScore = score;
-        best = { handIndex, tileIndex, score };
-      }
-    });
-  });
-
-  return best;
+  return BOT_STRATEGY.chooseCardMove(game);
 }
 
-function scoreBotCardMove(game, handIndex, tileIndex, blockThreats) {
-  const player = currentPlayer(game);
-  const enemyId = player.id === 1 ? 2 : 1;
-  const value = player.hand[handIndex];
-  const tile = game.board[tileIndex];
-  const top = topCard(tile);
-  const sweep = !!top && top.value === value;
-  let score = value * 8;
-
-  if (sweep) {
-    score += top.owner === enemyId ? 380 + top.value * 42 : -620;
-    if (blockThreats.has(tileIndex)) score += 700;
-    return score;
-  }
-
-  if (wouldWinAfterMove(game, tileIndex, player.id)) score += 20000;
-  if (blockThreats.has(tileIndex)) score += 6500;
-
-  if (top?.owner === enemyId) {
-    score += 240 + top.value * 40;
-    if (top.value >= 10) score += 360;
-  } else if (!top) {
-    score += 70;
-  }
-
-  if ([5, 6, 9, 10].includes(tileIndex)) score += 95;
-  if ([0, 3, 12, 15].includes(tileIndex)) score += 36;
-  if (value === 14) score += 460;
-  if (value === 3) score += 230;
-  if (value === 6) {
-    const stunScore = bestBotStunTargetScore(game, tileIndex, player.id);
-    score += stunScore > -Infinity ? 160 + Math.min(stunScore, 2200) : -5000;
-  }
-  if (value === 4 || value === 5) score += 120 + botShooterPotential(game, tileIndex, value, player.id);
-
-  WIN_LINES.forEach((line) => {
-    if (!line.includes(tileIndex)) return;
-    let own = 0;
-    let enemy = 0;
-    let empty = 0;
-    line.forEach((index) => {
-      const owner = ownerAfterBotMove(game, index, tileIndex, player.id, false);
-      if (owner === player.id) own += 1;
-      else if (owner === enemyId) enemy += 1;
-      else empty += 1;
-    });
-    if (own === 4) score += 20000;
-    if (own === 3 && empty === 1) score += 1250;
-    if (own === 2 && empty >= 1) score += 320;
-    if (enemy === 3 && empty === 1) score += 520;
-    score += own * own * 140;
-    score -= enemy * enemy * 48;
-  });
-
-  return score;
-}
-
-function ownerAfterBotMove(game, index, tileIndex, ownerId, sweep) {
-  if (index === tileIndex) return sweep ? 0 : ownerId;
-  return topCard(game.board[index])?.owner || 0;
-}
-
-function wouldWinAfterMove(game, tileIndex, ownerId) {
-  return WIN_LINES.some((line) => (
-    line.includes(tileIndex) &&
-    line.every((index) => ownerAfterBotMove(game, index, tileIndex, ownerId, false) === ownerId)
-  ));
-}
-
-function getThreatTilesForOwner(game, ownerId) {
-  const threats = new Set();
-  WIN_LINES.forEach((line) => {
-    let owned = 0;
-    line.forEach((index) => {
-      if (topCard(game.board[index])?.owner === ownerId) owned += 1;
-    });
-    if (owned !== 3) return;
-    line.forEach((index) => {
-      if (topCard(game.board[index])?.owner !== ownerId) threats.add(index);
-    });
-  });
-  return threats;
-}
-
-function tileLinePressure(game, tileIndex, ownerId) {
-  let score = 0;
-  WIN_LINES.forEach((line) => {
-    if (!line.includes(tileIndex)) return;
-    const owned = line.filter((index) => topCard(game.board[index])?.owner === ownerId).length;
-    if (owned === 3) score += 520;
-    else if (owned === 2) score += 170;
-  });
-  return score;
-}
-
-function botShooterPotential(game, tileIndex, value, ownerId, pierce = false) {
-  if (value !== 4 && value !== 5) return 0;
-  const dirs = value === 4 ? [[-1, -1], [-1, 1], [1, -1], [1, 1]] : [[-1, 0], [1, 0], [0, -1], [0, 1]];
-  const startRow = Math.floor(tileIndex / 4);
-  const startCol = tileIndex % 4;
-  let score = 0;
-
-  dirs.forEach(([rowDelta, colDelta]) => {
-    let row = startRow + rowDelta;
-    let col = startCol + colDelta;
-    while (row >= 0 && row < 4 && col >= 0 && col < 4) {
-      const index = row * 4 + col;
-      const card = topCard(game.board[index]);
-      if (card) {
-        if (card.owner !== ownerId && canShootCard(card, { owner: ownerId, pierce })) {
-          score += 180 + card.value * 45 + tileLinePressure(game, index, card.owner);
-        } else if (card.owner !== ownerId && !pierce && card.value >= 10 && currentPlayer(game).tokens.pierce > 0) {
-          score += 95 + card.value * 15;
-        }
-        break;
-      }
-      row += rowDelta;
-      col += colDelta;
-    }
-  });
-
-  return score;
-}
 
 function maybeBotUseSupportToken(game) {
-  const player = currentPlayer(game);
   if (game.tokensUsed >= 2) return false;
-
-  if (player.tokens.potion > 0) {
-    const potionTile = chooseBotPotionTile(game);
-    if (potionTile !== null && useTokenOnTile(game, "potion", potionTile).ok) return true;
-  }
-
-  if (player.tokens.ammo > 0) {
-    const ammoTile = chooseBotAmmoTile(game);
-    if (ammoTile !== null && useTokenOnTile(game, "ammo", ammoTile).ok) return true;
-  }
-
-  if (player.tokens.bard > 0) {
-    const bardTile = chooseBotBardTile(game);
-    if (bardTile !== null && useTokenOnTile(game, "bard", bardTile).ok) return true;
-  }
-
-  if (player.tokens.parry > 0 && game.tokensUsed < 2) {
-    const parryTile = chooseBotParryTile(game);
-    if (parryTile !== null && useTokenOnTile(game, "parry", parryTile).ok) return true;
-  }
-
-  return false;
-}
-
-function chooseBotPotionTile(game) {
-  const playerId = currentPlayer(game).id;
-  let best = null;
-  let bestScore = -Infinity;
-  game.board.forEach((tile, index) => {
-    const card = topCard(tile);
-    if (!card || card.owner !== playerId || (tile.stunTurns <= 0 && !card.stunned)) return;
-    const score = card.value * 70 + tileLinePressure(game, index, playerId);
-    if (score > bestScore) {
-      bestScore = score;
-      best = index;
-    }
-  });
-  return best;
-}
-
-function chooseBotAmmoTile(game) {
-  const playerId = currentPlayer(game).id;
-  let best = null;
-  let bestScore = 0;
-  game.board.forEach((tile, index) => {
-    const card = topCard(tile);
-    if (!card || card.owner !== playerId || !isShooter(card, tile)) return;
-    if (tile.tokens.some((token) => token.owner === playerId && token.type === "ammo")) return;
-    const score = botShooterPotential(game, index, effectiveValue(card, tile), playerId, card.pierce);
-    if (score > bestScore) {
-      bestScore = score;
-      best = index;
-    }
-  });
-  return best;
-}
-
-function chooseBotBardTile(game) {
-  const playerId = currentPlayer(game).id;
-  let best = null;
-  let bestScore = 0;
-  game.board.forEach((tile, index) => {
-    const card = topCard(tile);
-    if (!card || card.owner !== playerId || ![1, 2].includes(card.value)) return;
-    if (tile.tokens.some((token) => token.owner === playerId && token.type === "bard")) return;
-    const shooterValue = card.value === 1 ? 4 : 5;
-    const score = botShooterPotential(game, index, shooterValue, playerId);
-    if (score > bestScore) {
-      bestScore = score;
-      best = index;
-    }
-  });
-  return best;
-}
-
-function chooseBotParryTile(game) {
-  const playerId = currentPlayer(game).id;
-  let best = null;
-  let bestScore = 0;
-  game.board.forEach((tile, index) => {
-    const card = topCard(tile);
-    if (!card || card.owner !== playerId || card.protected) return;
-    if (tile.tokens.some((token) => token.owner === playerId && token.type === "parry")) return;
-    const score = card.value * 34 + tileLinePressure(game, index, playerId);
-    if (score > bestScore && (card.value >= 10 || score >= 520)) {
-      bestScore = score;
-      best = index;
-    }
-  });
-  return best;
+  const action = BOT_STRATEGY.chooseSupportAction(game);
+  return !!action && useTokenOnTile(game, action.type, action.tileIndex).ok;
 }

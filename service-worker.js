@@ -1,4 +1,4 @@
-const CACHE_NAME = "jesters-grid-pwa-v39";
+const CACHE_NAME = "jesters-grid-pwa-v40";
 const APP_ASSETS = [
   "/",
   "/index.html",
@@ -35,6 +35,7 @@ const APP_ASSETS = [
   "/assets/ui/gameplay-generated/card-art-12.png",
   "/assets/ui/gameplay-generated/card-art-13.png",
   "/assets/ui/gameplay-generated/card-art-14.png",
+  "/bot-strategy.js",
   "/client.js",
   "/manifest.webmanifest",
   "/icon.svg"

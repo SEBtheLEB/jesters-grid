@@ -5,7 +5,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check client.js",
+    "check": "node --check server.js && node --check client.js && node --check bot-strategy.js",
+    "test:bot": "node scripts/bot-strategy-smoke.js",
+    "test:bot-api": "node scripts/bot-api-smoke.js",
     "test:multiplayer": "node scripts/multiplayer-smoke.js"
   },
   "keywords": [
